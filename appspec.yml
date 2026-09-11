@@ -1,0 +1,12 @@
+version: 0.0
+os: linux
+
+files:
+  - source: build/web/
+    destination: /var/www/chirag
+
+hooks:
+  AfterInstall:
+    - location: scripts/deploy.sh
+      timeout: 300
+      runas: root

@@ -1,0 +1,95 @@
+# Chirag Accounting Chat Support Upload Routing - Implementation Plan
+
+## 1. Objective
+Build a chat-first upload flow where users can upload PDF, image, or spreadsheet files from support chat, get AI-assisted document classification, review extracted fields, and route directly to the correct entry/import screen.
+
+## 2. Current Baseline (Already in Code)
+- Chat attachments are supported in `ClientChatScreen`.
+- OCR and document analysis exist in `InvoiceOcrService`.
+- Upload auto-routing exists in `ClientUploadsScreen` for core invoice/voucher kinds.
+- Entry screens already accept prefill payloads:
+  - Sales: `AddSalesInvoiceScreen`
+  - Purchase: `AddPurchaseBillScreen`
+  - Banking vouchers: `ClientBankScreen`
+- Data exchange import screens already exist for inventory/ledger files:
+  - `ClientDataExchangeScreen`
+
+## 3. Scope for Phase 1 (Now)
+- Include spreadsheet uploads in chat and uploads flow.
+- Add route suggestion layer for deterministic screen mapping.
+- Add a review-and-submit gate before auto-navigation.
+- Route spreadsheet files to inventory or ledger imports.
+- Keep existing OCR pipeline for PDF/image files.
+
+## 4. Route Matrix (Phase 1)
+| Detection Source | Detected Type / Hint | Destination Screen |
+|---|---|---|
+| OCR | Sales Invoice | Add Sales Invoice |
+| OCR | Purchase Bill | Add Purchase Bill |
+| OCR | Payment Voucher / Cheque Given | Bank Screen (Payment) |
+| OCR | Receipt Voucher / Cheque Received | Bank Screen (Receipt) |
+| OCR | Credit Note | Bank Screen (Credit Note) |
+| OCR | Debit Note | Bank Screen (Debit Note) |
+| File name + extension | Inventory-like spreadsheet | Data Exchange (Inventory tab) |
+| File name + extension | Ledger/statement-like spreadsheet | Data Exchange (Ledger tab) |
+| OCR low confidence / unknown | Unknown | Manual destination selection |
+
+## 5. Confidence and Confirmation Policy
+- Always show a review dialog before routing from chat auto-detect mode.
+- If confidence < 80% or type is unknown, require manual destination selection.
+- Submit confirms routing; Cancel returns without navigation.
+
+## 6. Technical Design
+### 6.1 Router Layer
+- Add `ChatDocumentRouter` service to map:
+  - OCR analysis + file metadata -> route suggestion.
+  - Spreadsheet names -> inventory/ledger import.
+
+### 6.2 Upload Orchestrator
+Enhance `ClientUploadsScreen` to:
+- Accept path/bytes/name from chat.
+- Detect spreadsheet vs OCR file.
+- Run OCR only for PDF/image.
+- Store analysis + selected file payload.
+- Show review dialog and then route by explicit user submit.
+
+### 6.3 Web Compatibility
+Enhance `client_uploads_screen_web.dart` to expose inventory/ledger import routes for spreadsheet files where OCR is unavailable.
+
+## 7. Implementation Checklist
+- [x] Add route service for chat uploads.
+- [x] Expand chat file picker extension support.
+- [x] Add review-and-submit gate before auto-route.
+- [x] Add spreadsheet routing to Data Exchange imports.
+- [x] Add web-side manual inventory/ledger route actions.
+- [ ] Add backend AI classifier API integration (future).
+- [ ] Add duplicate invoice check in review flow (future).
+- [ ] Add per-field confidence and missing field highlights (future).
+- [ ] Add batch upload processing (future).
+
+## 8. File-Level Change Plan
+- `lib/features/clients/Chat/client_chat_screen.dart`
+  - Extend supported attachment formats.
+  - Keep chat-origin flag for upload flow.
+- `lib/features/clients/Uplads/client_uploads_screen.dart`
+  - Add route suggestion + review gate.
+  - Add spreadsheet handling and Data Exchange routing.
+- `lib/features/clients/Chat/services/chat_document_router.dart`
+  - New centralized route decision logic.
+- `lib/features/compat/screens/client_uploads_screen_web.dart`
+  - Add inventory/ledger manual continuation options.
+
+## 9. Validation Plan
+- Upload PDF sales invoice from chat -> review -> submit -> sales screen opens with prefill.
+- Upload purchase bill image from chat -> review -> submit -> purchase screen opens with prefill.
+- Upload `inventory_import_template.csv` -> review -> submit -> Data Exchange inventory tab opens with source.
+- Upload `all_ledgers_mixed_import_template.csv` -> review -> submit -> Data Exchange ledger tab opens.
+- Upload unclear file -> review requires manual destination choice.
+
+## 10. Risks and Mitigations
+- OCR quality variance across uploads:
+  - Mitigation: force confirmation gate and manual override.
+- Web OCR limitations:
+  - Mitigation: provide direct manual route actions and import screens.
+- Misclassification for spreadsheets:
+  - Mitigation: use deterministic fallback and manual choice in review dialog.

@@ -1,0 +1,6 @@
+{
+  "Region": "ap-south-1",
+  "BucketName": "replace-with-your-web-s3-bucket-name",
+  "DistributionId": "replace-with-your-cloudfront-distribution-id",
+  "WebUrl": "https://app.example.com"
+}

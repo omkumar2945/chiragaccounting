@@ -1,0 +1,6 @@
+# Copy this file to android/key.properties. Do not commit the copied file.
+# Create the keystore once with keytool, then set the values below.
+storePassword=
+keyPassword=
+keyAlias=chirag-accounting
+storeFile=../upload-keystore.jks

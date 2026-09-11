@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{8A9D0F51-9664-4E3A-B4FC-2D1FF936F7CC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chirag.Ocr.Api", "src\Chirag.Ocr.Api\Chirag.Ocr.Api.csproj", "{83D0DDD1-067E-47CB-BDA1-D114E7200DCF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{5E1C592B-55B8-4B42-B26A-8D09ED58CD34}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chirag.Ocr.Tests", "tests\Chirag.Ocr.Tests\Chirag.Ocr.Tests.csproj", "{4FF6B177-0A1F-429C-9C0D-9C90D02CB82C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{83D0DDD1-067E-47CB-BDA1-D114E7200DCF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{83D0DDD1-067E-47CB-BDA1-D114E7200DCF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{83D0DDD1-067E-47CB-BDA1-D114E7200DCF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{83D0DDD1-067E-47CB-BDA1-D114E7200DCF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4FF6B177-0A1F-429C-9C0D-9C90D02CB82C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4FF6B177-0A1F-429C-9C0D-9C90D02CB82C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4FF6B177-0A1F-429C-9C0D-9C90D02CB82C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4FF6B177-0A1F-429C-9C0D-9C90D02CB82C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{83D0DDD1-067E-47CB-BDA1-D114E7200DCF} = {8A9D0F51-9664-4E3A-B4FC-2D1FF936F7CC}
+		{4FF6B177-0A1F-429C-9C0D-9C90D02CB82C} = {5E1C592B-55B8-4B42-B26A-8D09ED58CD34}
+	EndGlobalSection
+EndGlobal

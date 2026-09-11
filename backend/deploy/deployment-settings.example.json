@@ -1,0 +1,8 @@
+{
+  "Region": "ap-south-1",
+  "Repository": "chirag-command-center-backend",
+  "Cluster": "replace-with-your-ecs-cluster-name",
+  "Service": "replace-with-your-ecs-service-name",
+  "ExecutionRoleArn": "arn:aws:iam::<account-id>:role/ecsTaskExecutionRole",
+  "TaskRoleArn": "arn:aws:iam::<account-id>:role/chirag-command-center-backend-task-role"
+}

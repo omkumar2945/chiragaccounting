@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Chirag OCR Entry</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,650&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="batch-upload.css">
+  <link rel="stylesheet" href="current-update.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="mark">C</span><div><strong>CHIRAG</strong><small>OCR ENTRY</small></div></div>
+    <div class="context"><label>Role <select id="role"><option>Accountant</option><option>Client</option></select></label><label>Client <input id="clientId" value="demo-company"></label><label>Accountant <input id="accountantId" value="demo-accountant"></label></div>
+    <div class="header-actions"><button id="integrationsButton" class="header-command">Integrations</button><span id="statusPill" class="pill muted">No document</span><button id="previousButton" class="icon" title="Previous document" aria-label="Previous document">←</button><button id="nextButton" class="icon" title="Next document" aria-label="Next document">→</button></div>
+  </header>
+
+  <main class="shell">
+    <aside class="inbox">
+      <div class="inbox-title"><div><span class="eyebrow">WORK QUEUE</span><h1>OCR Inbox</h1></div><label class="upload-button" title="Upload documents">＋<input id="fileInput" type="file" accept="image/*,.pdf" multiple></label></div>
+      <div class="metrics"><div><strong id="allCount">0</strong><span>All</span></div><div><strong id="reviewCount">0</strong><span>Review</span></div><div><strong id="readyCount">0</strong><span>Ready</span></div><div><strong id="processingCount">0</strong><span>Processing</span></div><div><strong id="errorCount">0</strong><span>Errors</span></div></div>
+      <div class="search"><span>⌕</span><input id="searchInput" placeholder="Search clients, folders, or files" aria-label="Search clients, folders, or files"></div>
+      <div class="folder-heading"><button id="folderBackButton" class="icon" title="Back to client folders" aria-label="Back to client folders" hidden>←</button><div><span class="eyebrow">CLIENT DOCUMENTS</span><strong id="folderPath">Clients</strong></div></div>
+      <div id="folderTiles" class="folder-tiles" aria-live="polite"></div>
+      <div class="filters" role="tablist"><button class="active" data-status="">All</button><button data-status="NeedsReview">Needs review</button><button data-status="Duplicate">Duplicates</button></div>
+      <label class="batch-type">Voucher type for this upload
+        <select id="batchVoucherType">
+          <option value="">Auto detect each document</option>
+          <option>Sales</option><option>Purchase</option><option>Receipt</option><option>Payment</option>
+          <option>Contra</option><option>Journal</option><option>CreditNote</option><option>DebitNote</option>
+          <option>Expense</option><option>AssetPurchase</option><option>BankReceipt</option><option>BankPayment</option><option>Other</option>
+        </select>
+      </label>
+      <div id="dropzone" class="dropzone"><strong>Drop invoices here</strong><span>PDF, PNG, JPEG, TIFF · up to 25 MB</span></div>
+      <div id="documentList" class="document-list" aria-live="polite"></div>
+    </aside>
+
+    <section class="workbench">
+      <section class="document-pane">
+        <div class="pane-toolbar"><div><strong id="documentName">Original document</strong><span id="pageLabel">Always visible during review</span></div><div class="tool-group"><button id="zoomOut" class="icon" title="Zoom out">−</button><span id="zoomLabel">100%</span><button id="zoomIn" class="icon" title="Zoom in">＋</button><button id="rotateButton" class="icon" title="Rotate">↻</button><button id="fullScreenButton" class="icon" title="Full screen">⛶</button></div></div>
+        <div id="preview" class="preview empty"><div class="preview-empty"><span class="document-icon">▤</span><strong>Select or upload a document</strong><span>The original remains beside the voucher while you work.</span></div></div>
+      </section>
+
+      <section class="voucher-pane">
+        <div class="voucher-header"><div><span class="eyebrow">ACCOUNTING DRAFT</span><div class="voucher-title"><select id="voucherType" aria-label="Voucher type"><option>Purchase</option><option>Sales</option><option>Receipt</option><option>Payment</option><option>Contra</option><option>Journal</option><option>CreditNote</option><option>DebitNote</option><option>Expense</option><option>AssetPurchase</option><option>BankReceipt</option><option>BankPayment</option><option>Other</option></select><span id="confidence" class="confidence low">Not detected</span></div></div><div class="mode-switch"><button class="active">Review</button><button>Manual</button></div></div>
+        <div id="notice" class="notice warning">Upload a document to begin. OCR values are never invented; missing values remain blank.</div>
+        <label class="automation-setting"><input id="autoMatchSession" type="checkbox" checked>Auto-apply high-confidence master matches for this session</label>
+        <form id="voucherForm">
+          <div class="form-grid">
+            <label>Party / ledger<span class="source">EXISTING MASTER ONLY</span><input id="partyName" autocomplete="off" placeholder="Select existing party"></label>
+            <label>Invoice date<input id="invoiceDate" type="date"></label>
+            <label>Document number<input id="documentNumber" placeholder="Not detected"></label>
+            <label>Due date<input id="dueDate" type="date"></label>
+            <label>Reference number<input id="referenceNumber" placeholder="Not detected"></label>
+            <label>GSTIN<input id="gstin" placeholder="Not detected"></label>
+            <label>Place of supply<input id="placeOfSupply" placeholder="Not detected"></label>
+            <label>Taxable value<input id="taxableAmount" inputmode="decimal" placeholder="0.00"></label>
+            <label>CGST<input id="cgst" inputmode="decimal" placeholder="0.00"></label>
+            <label>SGST / UTGST<input id="sgst" inputmode="decimal" placeholder="0.00"></label>
+            <label>IGST<input id="igst" inputmode="decimal" placeholder="0.00"></label>
+            <label>Cess<input id="cess" inputmode="decimal" placeholder="0.00"></label>
+            <label>Discount<input id="discount" inputmode="decimal" placeholder="0.00"></label>
+            <label>Other charges<input id="otherCharges" inputmode="decimal" placeholder="0.00"></label>
+            <label>Round-off<input id="roundOff" inputmode="decimal" placeholder="0.00"></label>
+            <label>Total amount<input id="totalAmount" inputmode="decimal" placeholder="0.00"></label>
+            <label>Payment method<select id="paymentMethod"><option value="">Not detected</option><option>Cash</option><option>Bank</option><option>UPI</option><option>Cheque</option><option>Card</option><option>NEFT</option><option>RTGS</option><option>IMPS</option></select></label>
+            <label>UTR / payment reference<input id="paymentReference" placeholder="Not detected"></label>
+          </div>
+          <div class="section-heading"><div><span class="eyebrow">POSTING</span><h2>Accounting lines</h2></div><button id="addLineButton" type="button" class="text-button">＋ Add line</button></div>
+          <div id="masterSuggestions" class="master-suggestions" hidden></div>
+          <div class="line-table"><div class="line-row line-head"><span>Ledger</span><span>Debit</span><span>Credit</span><span></span></div><div id="lines"></div></div>
+          <div class="totals"><span>Totals</span><strong id="debitTotal">₹0.00</strong><strong id="creditTotal">₹0.00</strong><span></span></div>
+          <label class="narration">Narration<textarea id="narration" rows="2" placeholder="Being..."></textarea></label>
+        </form>
+        <div id="validationPanel" class="validation"><span class="dot"></span><span>No draft validated</span></div>
+        <div class="actionbar"><button id="rejectButton" class="secondary">Reject</button><button id="reprocessButton" class="secondary">Reprocess</button><button id="validateButton" class="secondary">Validate</button><button id="saveButton">Save draft</button><button id="confirmButton" class="primary" disabled>Confirm &amp; Save</button></div>
+      </section>
+    </section>
+  </main>
+  <dialog id="integrationDialog"><div class="dialog-title"><div><span class="eyebrow">OPERATIONS</span><h2>API &amp; Integration Manager</h2></div><button id="closeIntegrations" class="icon" aria-label="Close">×</button></div><div id="integrationList" class="integration-list"></div></dialog>
+  <script src="app.js"></script>
+</body>
+</html>

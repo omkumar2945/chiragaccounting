@@ -1,0 +1,147 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:chirag_accounting/features/ai_workbench/services/ocr_module_api_service.dart';
+import 'package:chirag_accounting/features/ai_workbench/services/workbench_queue_service.dart';
+import 'package:chirag_accounting/features/client_portal/models/client_portal_module.dart';
+import 'package:chirag_accounting/features/client_portal/services/client_portal_access_service.dart';
+import 'package:chirag_accounting/features/clients/services/document_hub_service.dart';
+import 'package:chirag_accounting/features/services/invoice_ocr_service.dart';
+import 'package:chirag_accounting/features/services/purchase_service.dart';
+import 'package:chirag_accounting/features/services/sales_service.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
+  test('client can edit and delete only own unposted document', () async {
+    final queue = WorkbenchQueueService();
+    final job = await queue.addJob(
+      fileName: 'invoice.pdf',
+      autoProcess: false,
+      clientId: 'client-1',
+      assignedAccountantId: 'accountant-1',
+    );
+
+    expect(
+      queue.updateClientDocument(
+        jobId: job.id,
+        clientId: 'client-2',
+        fileName: 'other.pdf',
+      ),
+      isFalse,
+    );
+    expect(
+      queue.updateClientDocument(
+        jobId: job.id,
+        clientId: 'client-1',
+        fileName: 'renamed.pdf',
+      ),
+      isTrue,
+    );
+    expect(queue.allJobs.single.fileName, 'renamed.pdf');
+    expect(
+      queue.deleteClientDocument(jobId: job.id, clientId: 'client-2'),
+      isFalse,
+    );
+    expect(
+      queue.deleteClientDocument(jobId: job.id, clientId: 'client-1'),
+      isTrue,
+    );
+    expect(queue.allJobs, isEmpty);
+  });
+
+  test('accountant completion locks client edit and delete', () async {
+    final queue = WorkbenchQueueService();
+    final job = await queue.addJob(
+      fileName: 'invoice.pdf',
+      autoProcess: false,
+      clientId: 'client-1',
+      assignedAccountantId: 'accountant-1',
+    );
+
+    queue.completeJob(job.id);
+
+    expect(queue.allJobs.single.isPosted, isTrue);
+    expect(
+      queue.updateClientDocument(
+        jobId: job.id,
+        clientId: 'client-1',
+        fileName: 'renamed.pdf',
+      ),
+      isFalse,
+    );
+    expect(
+      queue.deleteClientDocument(jobId: job.id, clientId: 'client-1'),
+      isFalse,
+    );
+  });
+
+  test('document hub routes client intake to assigned accountant', () async {
+    final queue = WorkbenchQueueService();
+    final hub = DocumentHubService(
+      queueService: queue,
+      accessService: ClientPortalAccessService(),
+      salesService: SalesService(),
+      purchaseService: PurchaseService(),
+      assignedAccountantIdFor: (clientId) =>
+          clientId == 'client-1' ? 'accountant-1' : '',
+    );
+
+    await hub.ingestDocument(
+      clientId: 'client-1',
+      channel: ClientDocumentIntakeChannel.mobileApp,
+      fileName: 'invoice.pdf',
+    );
+
+    expect(queue.allJobs.single.clientId, 'client-1');
+    expect(queue.allJobs.single.assignedAccountantId, 'accountant-1');
+    await expectLater(
+      hub.ingestDocument(
+        clientId: 'client-2',
+        channel: ClientDocumentIntakeChannel.mobileApp,
+        fileName: 'unassigned.pdf',
+      ),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('remote OCR sync maps draft and keeps completed document locked', () {
+    final queue = WorkbenchQueueService();
+    final remote = RemoteOcrDocument.fromJson(<String, dynamic>{
+      'id': 'document-1',
+      'clientId': 'client-1',
+      'assignedAccountantId': 'accountant-1',
+      'originalFileName': 'purchase.pdf',
+      'status': 'Completed',
+      'uploadedAt': '2026-08-29T10:00:00Z',
+      'updatedAt': '2026-08-29T10:05:00Z',
+      'exactDuplicate': false,
+      'draftJson':
+          '{"voucherType":"Purchase","date":"2026-08-29",'
+          '"partyName":"ABC Traders","documentNumber":"INV-1",'
+          '"taxableAmount":1000,"cgst":90,"sgst":90,"igst":0,'
+          '"totalAmount":1180,"confidence":0.96,'
+          '"classificationExplanation":"Detected purchase invoice"}',
+    });
+
+    expect(remote.result?.detectedKind, OcrDocumentKind.purchaseBill);
+    expect(remote.result?.parsedData.totalAmount, 1180);
+
+    queue.synchronizeRemoteDocuments(<RemoteOcrDocument>[remote]);
+    queue.synchronizeRemoteDocuments(<RemoteOcrDocument>[remote]);
+
+    expect(queue.allJobs, hasLength(1));
+    expect(queue.allJobs.single.isPosted, isTrue);
+    expect(
+      queue.deleteClientDocument(
+        jobId: queue.allJobs.single.id,
+        clientId: 'client-1',
+      ),
+      isFalse,
+    );
+  });
+}

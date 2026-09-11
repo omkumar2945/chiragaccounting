@@ -1,0 +1,115 @@
+{
+  "family": "chirag-command-center-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<account-id>:role/chirag-command-center-backend-task-role",
+  "containerDefinitions": [
+    {
+      "name": "chirag-command-center-backend",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/chirag-command-center-backend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PORT",
+          "value": "8080"
+        },
+        {
+          "name": "MSSQL_PORT",
+          "value": "1433"
+        },
+        {
+          "name": "MSSQL_ENCRYPT",
+          "value": "true"
+        },
+        {
+          "name": "MSSQL_TRUST_CERT",
+          "value": "false"
+        },
+        {
+          "name": "ACCOUNTING_PROVIDER",
+          "value": "erp_http"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/JWT_SECRET"
+        },
+        {
+          "name": "FIREBASE_SERVICE_ACCOUNT_JSON",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/FIREBASE_SERVICE_ACCOUNT_JSON"
+        },
+        {
+          "name": "MSSQL_SERVER",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/MSSQL_SERVER"
+        },
+        {
+          "name": "MSSQL_DATABASE",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/MSSQL_DATABASE"
+        },
+        {
+          "name": "MSSQL_USER",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/MSSQL_USER"
+        },
+        {
+          "name": "MSSQL_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/MSSQL_PASSWORD"
+        },
+        {
+          "name": "ACCOUNTING_API_BASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/ACCOUNTING_API_BASE_URL"
+        },
+        {
+          "name": "ACCOUNTING_API_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/ACCOUNTING_API_TOKEN"
+        },
+        {
+          "name": "EINVOICE_API_URL",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/EINVOICE_API_URL"
+        },
+        {
+          "name": "EINVOICE_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/EINVOICE_API_KEY"
+        },
+        {
+          "name": "EWAY_API_URL",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/EWAY_API_URL"
+        },
+        {
+          "name": "EWAY_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/EWAY_API_KEY"
+        },
+        {
+          "name": "PRINTER_API_URL",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/PRINTER_API_URL"
+        },
+        {
+          "name": "PRINTER_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/PRINTER_API_KEY"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/chirag-command-center-backend",
+          "awslogs-region": "<region>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
