@@ -1,5 +1,23 @@
 version: 0.2
 
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 513954968199.dkr.ecr.ap-south-1.amazonaws.com
+
+  build:
+    commands:
+      - echo Building Docker image...
+      - docker build -t $ImageName -f ./backend/Dockerfile ./backend
+
+  post_build:
+    commands:
+      - echo Pushing image to ECR...
+      - docker tag $ImageName:latest 513954968199.dkr.ecr.ap-south-1.amazonaws.com/$ImageName:latest
+      - docker push 513954968199.dkr.ecr.ap-south-1.amazonaws.com/$ImageName:latest
+version: 0.2
+
 env:
   variables:
     FLUTTER_CHANNEL: stable
