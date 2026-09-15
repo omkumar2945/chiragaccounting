@@ -37,6 +37,8 @@ class AuthController extends ChangeNotifier {
   AuthTokenModel? _currentToken;
   String? _errorMessage;
   String? _pendingOtpTarget;
+  String? _pendingPasswordResetChallengeId;
+  String? _pendingPasswordResetToken;
   Set<UserRole>? _pendingAllowedRoles;
 
   AuthState get state => _state;
@@ -44,6 +46,7 @@ class AuthController extends ChangeNotifier {
   AuthTokenModel? get currentToken => _currentToken;
   String? get errorMessage => _errorMessage;
   String? get pendingOtpTarget => _pendingOtpTarget;
+  String? get pendingPasswordResetToken => _pendingPasswordResetToken;
   bool get isAuthenticated => _state == AuthState.authenticated;
   bool get isLoading => _state == AuthState.loading;
 
@@ -190,7 +193,9 @@ class AuthController extends ChangeNotifier {
   Future<bool> forgotPassword(String emailOrMobile) async {
     _setState(AuthState.loading);
     try {
-      await _authService.forgotPassword(emailOrMobile);
+      _pendingPasswordResetChallengeId =
+          await _authService.forgotPassword(emailOrMobile);
+      _pendingPasswordResetToken = null;
       _pendingOtpTarget = emailOrMobile.trim();
       _setState(AuthState.initial);
       return true;
@@ -203,19 +208,90 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  Future<bool> resetPassword({
+  Future<bool> verifyPasswordResetOtp(String otp) async {
+    final challengeId = _pendingPasswordResetChallengeId;
+    if (challengeId == null) {
+      _setError('Please request a new password reset code.');
+      return false;
+    }
+    _setState(AuthState.loading);
+    try {
+      _pendingPasswordResetToken = await _authService.verifyPasswordResetOtp(
+        challengeId: challengeId,
+        otp: otp,
+      );
+      _pendingPasswordResetChallengeId = null;
+      _setState(AuthState.initial);
+      return true;
+    } on AuthException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (_) {
+      _setError('OTP verification failed. Please try again.');
+      return false;
+    }
+  }
+
+  Future<bool> sendPasswordChangeOtp(String mobile) async {
+    _setState(AuthState.loading);
+    try {
+      if (ApiConstants.useMockApi) {
+        throw const AuthException('Firebase OTP is not available with the mock API.');
+      }
+      await _firebasePhoneOtp.sendOtp(mobile);
+      _setState(AuthState.initial);
+      return true;
+    } on AuthException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (_) {
+      _setError('Failed to send password-change OTP. Please try again.');
+      return false;
+    }
+  }
+
+  Future<bool> changePasswordWithFirebaseOtp({
     required String otp,
     required String newPassword,
   }) async {
-    if (_pendingOtpTarget == null) return false;
+    _setState(AuthState.loading);
+    try {
+      if (ApiConstants.useMockApi) {
+        throw const AuthException('Firebase OTP is not available with the mock API.');
+      }
+      final idToken = await _firebasePhoneOtp.verifyOtp(otp);
+      await _authService.changePasswordWithFirebaseOtp(
+        idToken: idToken,
+        newPassword: newPassword,
+      );
+      _setState(AuthState.initial);
+      return true;
+    } on AuthException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (_) {
+      _setError('Password change verification failed. Please try again.');
+      return false;
+    }
+  }
+
+  Future<bool> resetPassword({
+    required String newPassword,
+  }) async {
+    final resetToken = _pendingPasswordResetToken;
+    if (resetToken == null) {
+      _setError('Please verify the password reset code again.');
+      return false;
+    }
     _setState(AuthState.loading);
     try {
       await _authService.resetPassword(
-        emailOrMobile: _pendingOtpTarget!,
-        otp: otp,
+        resetToken: resetToken,
         newPassword: newPassword,
       );
       _pendingOtpTarget = null;
+      _pendingPasswordResetChallengeId = null;
+      _pendingPasswordResetToken = null;
       _setState(AuthState.initial);
       return true;
     } on AuthException catch (e) {
@@ -273,6 +349,8 @@ class AuthController extends ChangeNotifier {
     _currentUser = null;
     _currentToken = null;
     _pendingOtpTarget = null;
+    _pendingPasswordResetChallengeId = null;
+    _pendingPasswordResetToken = null;
     _pendingAllowedRoles = null;
     _errorMessage = null;
     _state = AuthState.unauthenticated;

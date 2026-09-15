@@ -7,6 +7,7 @@ import { env, firebaseServiceAccount } from '../config/env.js';
 import { SqlAuthRepository } from '../repositories/authRepository.js';
 import { AuthenticationError, AuthService } from '../services/authService.js';
 import { EmailDeliveryConfigurationError, EmailOtpService } from '../services/emailOtpService.js';
+import { isValidPassword, passwordPolicyMessage } from '../security/passwordPolicy.js';
 
 const loginSchema = z.object({
   identifier: z.string().trim().min(1).optional(),
@@ -39,7 +40,7 @@ const emailOtpVerifySchema = emailOtpFields.extend({ otp: z.string().regex(/^\d{
 );
 const resetPasswordSchema = emailOtpFields.extend({
   otp: z.string().regex(/^\d{6}$/),
-  newPassword: z.string().min(8).max(200),
+  newPassword: z.string().min(8).max(200).refine(isValidPassword, passwordPolicyMessage),
 }).refine(
   (body) => body.identifier || body.emailOrMobile || body.email,
   { message: 'A registered email is required.' },

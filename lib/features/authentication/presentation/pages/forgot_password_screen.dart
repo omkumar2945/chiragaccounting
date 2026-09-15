@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:chirag_accounting/core/utils/password_policy.dart';
 import 'package:chirag_accounting/features/authentication/controllers/auth_controller.dart';
 import 'otp_screen.dart';
 import 'login_screen.dart';
@@ -165,14 +166,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 // --------------- Reset Password Screen (after OTP verified) ---------------
 
 class ResetPasswordScreen extends StatefulWidget {
-  final String emailOrMobile;
-  final String otp;
-
-  const ResetPasswordScreen({
-    super.key,
-    required this.emailOrMobile,
-    required this.otp,
-  });
+  const ResetPasswordScreen({super.key});
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -195,9 +189,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthController>();
-    // Inject OTP back into auth controller pending target
     final success = await auth.resetPassword(
-      otp: widget.otp,
       newPassword: _newPasswordCtrl.text,
     );
     if (!mounted) return;
@@ -266,6 +258,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                         TextFormField(
                           controller: _newPasswordCtrl,
                           obscureText: _obscureNew,
+                          onChanged: (_) => setState(() {}),
                           decoration: InputDecoration(
                             labelText: 'New Password',
                             prefixIcon: const Icon(Icons.lock_outline),
@@ -279,13 +272,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10)),
                           ),
-                          validator: (v) {
-                            if (v == null || v.length < 6) {
-                              return 'Minimum 6 characters';
-                            }
-                            return null;
-                          },
+                          validator: validatePassword,
                         ),
+                        const SizedBox(height: 8),
+                        PasswordStrengthGuide(password: _newPasswordCtrl.text),
                         const SizedBox(height: 14),
                         TextFormField(
                           controller: _confirmCtrl,

@@ -6,12 +6,14 @@ class ChiragAssociatesLogo extends StatelessWidget {
     this.horizontal = true,
     this.compact = false,
     this.onDark = false,
+    this.showName = true,
     this.showTagline = true,
   });
 
   final bool horizontal;
   final bool compact;
   final bool onDark;
+  final bool showName;
   final bool showTagline;
 
   @override
@@ -40,17 +42,21 @@ class ChiragAssociatesLogo extends StatelessWidget {
       ),
     );
 
+    final hasText = showName || showTagline;
     final textBlock = Column(
-      crossAxisAlignment: horizontal ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: horizontal
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       children: [
-        Text(
-          'Chirag Associates',
-          style: TextStyle(
-            color: fg,
-            fontWeight: FontWeight.w800,
-            fontSize: compact ? 12 : 15,
+        if (showName)
+          Text(
+            'Chirag Associates',
+            style: TextStyle(
+              color: fg,
+              fontWeight: FontWeight.w800,
+              fontSize: compact ? 12 : 15,
+            ),
           ),
-        ),
         if (showTagline)
           Text(
             'Accounting and Compliance',
@@ -68,8 +74,7 @@ class ChiragAssociatesLogo extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           mark,
-          const SizedBox(width: 8),
-          textBlock,
+          if (hasText) ...[const SizedBox(width: 8), textBlock],
         ],
       );
     }
@@ -78,8 +83,7 @@ class ChiragAssociatesLogo extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         mark,
-        const SizedBox(height: 6),
-        textBlock,
+        if (hasText) ...[const SizedBox(height: 6), textBlock],
       ],
     );
   }

@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:chirag_accounting/core/utils/file_download.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -303,16 +304,14 @@ class _GstNoticeManagementScreenState extends State<GstNoticeManagementScreen> {
         );
 
   Future<void> _saveOriginal(GstManagedNotice notice) async {
-    await FilePicker.saveFile(
-      dialogTitle: 'Save original GST notice',
+    await downloadFile(
       fileName: notice.fileName,
       bytes: notice.originalDocumentBytes,
     );
   }
 
   Future<void> _saveFinalOrder(GstManagedNotice notice) async {
-    await FilePicker.saveFile(
-      dialogTitle: 'Save final GST order',
+    await downloadFile(
       fileName: notice.finalOrderFileName,
       bytes: notice.finalOrderBytes,
     );

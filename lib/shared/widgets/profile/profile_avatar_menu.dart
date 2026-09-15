@@ -20,7 +20,10 @@ class ProfileAvatarMenu extends StatelessWidget {
     if (user == null) return const SizedBox.shrink();
 
     return FutureBuilder(
-      future: ClientProfileService().load(user.id),
+      future: ClientProfileService().load(
+        user.id,
+        useAuthoritativeClientApi: user.role.isClient,
+      ),
       builder: (context, snapshot) {
         final base64Image = snapshot.data?.logoDataBase64 ?? '';
         ImageProvider<Object>? provider;

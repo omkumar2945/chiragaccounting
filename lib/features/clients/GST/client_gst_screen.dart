@@ -58,7 +58,12 @@ class _ClientGstScreenState extends State<ClientGstScreen> {
 
   Future<void> _loadClientGstins() async {
     final user = context.read<AuthController>().currentUser;
-    final profile = user == null ? null : await _profileService.load(user.id);
+    final profile = user == null
+        ? null
+        : await _profileService.load(
+            user.id,
+            useAuthoritativeClientApi: user.role.isClient,
+          );
 
     final fromProfile = (profile?.gstin ?? '').trim().toUpperCase();
     final options = <String>[];
@@ -67,10 +72,7 @@ class _ClientGstScreenState extends State<ClientGstScreen> {
     }
 
     if (options.isEmpty) {
-      options.addAll(<String>[
-        '27ABCDE1234F1Z5',
-        '24AAACS1234D1Z2',
-      ]);
+      options.addAll(<String>['27ABCDE1234F1Z5', '24AAACS1234D1Z2']);
     }
 
     setState(() {
@@ -113,18 +115,28 @@ class _ClientGstScreenState extends State<ClientGstScreen> {
         final height = screen.height < 760 ? screen.height - 64 : 620.0;
 
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: SizedBox(
             width: width,
             height: height,
             child: Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   decoration: const BoxDecoration(
                     color: Color(0xFF1565C0),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -162,16 +174,14 @@ class _ClientGstScreenState extends State<ClientGstScreen> {
   Future<void> _openApiModuleDialog({
     required String title,
     required Future<GstModuleApiResult> Function(String gstin, String clientId)
-        loader,
+    loader,
   }) async {
     final gstin = (_selectedGstin ?? '').trim().toUpperCase();
     final user = context.read<AuthController>().currentUser;
 
     await _showModuleDialog(
       title: title,
-      child: _GstApiModuleContent(
-        load: () => loader(gstin, user?.id ?? ''),
-      ),
+      child: _GstApiModuleContent(load: () => loader(gstin, user?.id ?? '')),
     );
   }
 
@@ -213,8 +223,10 @@ class _ClientGstScreenState extends State<ClientGstScreen> {
         onTap: () {
           _openApiModuleDialog(
             title: 'GSTR-3B',
-            loader: (gstin, clientId) =>
-                _gstReturnsService.fetchGstr3b(gstin: gstin, clientId: clientId),
+            loader: (gstin, clientId) => _gstReturnsService.fetchGstr3b(
+              gstin: gstin,
+              clientId: clientId,
+            ),
           );
         },
       ),
@@ -256,8 +268,10 @@ class _ClientGstScreenState extends State<ClientGstScreen> {
         onTap: () {
           _openApiModuleDialog(
             title: 'GST Analytics',
-            loader: (gstin, clientId) =>
-                _gstReturnsService.fetchAnalytics(gstin: gstin, clientId: clientId),
+            loader: (gstin, clientId) => _gstReturnsService.fetchAnalytics(
+              gstin: gstin,
+              clientId: clientId,
+            ),
           );
         },
       ),
@@ -296,75 +310,75 @@ class _ClientGstScreenState extends State<ClientGstScreen> {
               padding: EdgeInsets.all(wide ? 16 : 12),
               children: [
                 Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0E4C92), Color(0xFF1565C0)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF0E4C92).withValues(alpha: 0.20),
-                  blurRadius: 18,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Client GST Dashboard',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0E4C92), Color(0xFF1565C0)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0E4C92).withValues(alpha: 0.20),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Client GST Dashboard',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'Track profile, return filing, matching and analytics in one place.',
+                        style: TextStyle(color: Colors.white70, height: 1.3),
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(height: 6),
+                const SizedBox(height: 16),
                 Text(
-                  'Track profile, return filing, matching and analytics in one place.',
-                  style: TextStyle(color: Colors.white70, height: 1.3),
+                  'Client: ${user?.name ?? 'Client'}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Client: ${user?.name ?? 'Client'}',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          if (_loadingGstin)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: LinearProgressIndicator(minHeight: 3),
-            )
-          else
-            SearchableDropdownFormField<String>(
-              value: _selectedGstin,
-              decoration: const InputDecoration(
-                labelText: 'Select GSTIN',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: _gstinOptions,
-              itemLabelBuilder: (gstin) => gstin,
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _selectedGstin = value);
-                _fetchTaxpayerProfile();
-              },
-            ),
-          const SizedBox(height: 16),
-          const Text(
-            'Quick Return Snapshot',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 10),
-          ..._returnStatus.map((item) => _GstStatusCard(item: item)),
+                const SizedBox(height: 8),
+                if (_loadingGstin)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(minHeight: 3),
+                  )
+                else
+                  SearchableDropdownFormField<String>(
+                    value: _selectedGstin,
+                    decoration: const InputDecoration(
+                      labelText: 'Select GSTIN',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: _gstinOptions,
+                    itemLabelBuilder: (gstin) => gstin,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _selectedGstin = value);
+                      _fetchTaxpayerProfile();
+                    },
+                  ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Quick Return Snapshot',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                ..._returnStatus.map((item) => _GstStatusCard(item: item)),
               ],
             ),
           ),
@@ -532,7 +546,10 @@ class _GstStatusCard extends StatelessWidget {
           backgroundColor: item.color.withValues(alpha: 0.12),
           child: Icon(Icons.receipt_long_outlined, color: item.color),
         ),
-        title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        title: Text(
+          item.title,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         subtitle: Text('${item.subtitle}\nDue: ${item.dueDate}'),
         isThreeLine: true,
         trailing: Chip(
@@ -635,8 +652,10 @@ class _GstApiModuleContentState extends State<_GstApiModuleContent> {
                   if (result.kpis.isNotEmpty) ...[
                     const Text(
                       'Summary',
-                      style:
-                          TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Wrap(
@@ -651,12 +670,15 @@ class _GstApiModuleContentState extends State<_GstApiModuleContent> {
                   if (result.records.isNotEmpty) ...[
                     const Text(
                       'Records',
-                      style:
-                          TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    ...result.records
-                        .map((record) => _GstApiRecordCard(record: record)),
+                    ...result.records.map(
+                      (record) => _GstApiRecordCard(record: record),
+                    ),
                   ],
                   if (result.kpis.isEmpty && result.records.isEmpty)
                     const Padding(
@@ -668,10 +690,7 @@ class _GstApiModuleContentState extends State<_GstApiModuleContent> {
                   const SizedBox(height: 8),
                   Text(
                     'Last synced: ${_formatDateTime(result.fetchedAt)}',
-                    style: const TextStyle(
-                      color: Colors.black54,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.black54, fontSize: 12),
                   ),
                 ],
               ),
@@ -712,20 +731,14 @@ class _GstKpiTile extends StatelessWidget {
             kpi.label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.black54,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: Colors.black54, fontSize: 12),
           ),
           const SizedBox(height: 4),
           Text(
             kpi.value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
           ),
         ],
       ),
@@ -743,10 +756,7 @@ class _GstApiRecordCard extends StatelessWidget {
     final chips = <Widget>[];
     if (record.status != null && record.status!.trim().isNotEmpty) {
       chips.add(
-        Chip(
-          label: Text(record.status!),
-          visualDensity: VisualDensity.compact,
-        ),
+        Chip(label: Text(record.status!), visualDensity: VisualDensity.compact),
       );
     }
     if (record.amount != null && record.amount!.trim().isNotEmpty) {

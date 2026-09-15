@@ -1,0 +1,42 @@
+version: 0.2
+
+# Web CodeBuild project. Configure this file explicitly in the web pipeline;
+# its artifact is consumed by the existing CodeDeploy web deployment stage.
+env:
+  variables:
+    FLUTTER_CHANNEL: stable
+    USE_MOCK_API: "false"
+
+phases:
+  install:
+    commands:
+      - git clone --depth 1 --branch "$FLUTTER_CHANNEL" https://github.com/flutter/flutter.git "$HOME/flutter"
+      - export PATH="$HOME/flutter/bin:$PATH"
+      - flutter config --enable-web
+      - flutter --version
+  pre_build:
+    commands:
+      - export PATH="$HOME/flutter/bin:$PATH"
+      - test -n "$API_BASE_URL"
+      - flutter pub get
+  build:
+    commands:
+      - export PATH="$HOME/flutter/bin:$PATH"
+      - >-
+        flutter build web --release
+        --dart-define=USE_MOCK_API="$USE_MOCK_API"
+        --dart-define=API_BASE_URL="$API_BASE_URL"
+        --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY"
+        --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID"
+        --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID"
+        --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID"
+        --dart-define=FIREBASE_AUTH_DOMAIN="$FIREBASE_AUTH_DOMAIN"
+        --dart-define=FIREBASE_STORAGE_BUCKET="$FIREBASE_STORAGE_BUCKET"
+        --dart-define=FIREBASE_MEASUREMENT_ID="$FIREBASE_MEASUREMENT_ID"
+        --dart-define=FIREBASE_WEB_VAPID_KEY="$FIREBASE_WEB_VAPID_KEY"
+
+artifacts:
+  files:
+    - appspec.yml
+    - build/web/**/*
+    - scripts/deploy.sh

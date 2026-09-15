@@ -192,7 +192,7 @@ Use the sample task definition at `deploy/ecs-task-definition.json` as the base 
 4. Register the task definition and create an ECS service behind an ALB.
 5. Set the ALB target group health check path to `GET /health`.
 
-For Fargate, ensure the ECS service security group can reach the MSSQL host and that the ALB security group can reach the service on port `8080`.
+For Fargate, ensure the ECS service security group can reach the MySQL RDS instance on port `3306` and that the ALB security group can reach the service on port `8080`.
 
 ### Deploy from VS Code
 
@@ -207,10 +207,11 @@ After making backend changes, press `Ctrl+Shift+B` in VS Code to deploy. You can
 Minimum required variables for startup:
 
 - `JWT_SECRET`
-- `MSSQL_SERVER`
-- `MSSQL_DATABASE`
-- `MSSQL_USER`
-- `MSSQL_PASSWORD`
+- `DB_HOST`
+- `DB_PORT`
+- `DB_NAME`
+- `DB_USER`
+- `DB_PASSWORD`
 
 `PORT` is already supported and should usually be left to the AWS runtime.
 

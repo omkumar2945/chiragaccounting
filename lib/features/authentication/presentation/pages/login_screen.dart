@@ -162,6 +162,7 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -194,361 +195,403 @@ class _LoginScreenState extends State<LoginScreen>
                 builder: (context, constraints) {
                   final compactHeight = constraints.maxHeight < 820;
                   final veryCompactHeight = constraints.maxHeight < 700;
-                  return Center(
+                  final formHeight =
+                      (constraints.maxHeight -
+                              (veryCompactHeight
+                                  ? 142
+                                  : (compactHeight ? 186 : 270)))
+                          .clamp(360.0, 560.0);
+                  return SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 540),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: veryCompactHeight
-                              ? 8
-                              : (compactHeight ? 12 : 18),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildHero(compact: veryCompactHeight),
-                            SizedBox(
-                              height: veryCompactHeight
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 540),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: veryCompactHeight
                                   ? 8
-                                  : (compactHeight ? 10 : 16),
+                                  : (compactHeight ? 12 : 18),
                             ),
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(26),
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(
-                                    sigmaX: 20,
-                                    sigmaY: 20,
-                                  ),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(26),
-                                      color: Colors.white.withValues(
-                                        alpha: 0.82,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildHero(compact: veryCompactHeight),
+                                SizedBox(
+                                  height: veryCompactHeight
+                                      ? 8
+                                      : (compactHeight ? 10 : 16),
+                                ),
+                                SizedBox(
+                                  height: formHeight,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(26),
+                                    child: BackdropFilter(
+                                      filter: ImageFilter.blur(
+                                        sigmaX: 20,
+                                        sigmaY: 20,
                                       ),
-                                      border: Border.all(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.35,
-                                        ),
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(
-                                            alpha: 0.20,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            26,
                                           ),
-                                          blurRadius: 28,
-                                          offset: const Offset(0, 18),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.82,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.35,
+                                            ),
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.20,
+                                              ),
+                                              blurRadius: 28,
+                                              offset: const Offset(0, 18),
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
-                                    child: Padding(
-                                      padding: EdgeInsets.fromLTRB(
-                                        veryCompactHeight
-                                            ? 14
-                                            : (compactHeight ? 16 : 22),
-                                        veryCompactHeight
-                                            ? 12
-                                            : (compactHeight ? 14 : 22),
-                                        veryCompactHeight
-                                            ? 14
-                                            : (compactHeight ? 16 : 22),
-                                        veryCompactHeight
-                                            ? 10
-                                            : (compactHeight ? 12 : 18),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
-                                        children: [
-                                          TabBar(
-                                            controller: _tabController,
-                                            labelColor: const Color(0xFF0E4C92),
-                                            unselectedLabelColor:
-                                                Colors.black54,
-                                            indicatorColor: const Color(
-                                              0xFF0E4C92,
-                                            ),
-                                            indicatorWeight: 3,
-                                            labelStyle: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 13,
-                                            ),
-                                            unselectedLabelStyle:
-                                                const TextStyle(
-                                                  fontWeight: FontWeight.w600,
+                                        child: Padding(
+                                          padding: EdgeInsets.fromLTRB(
+                                            veryCompactHeight
+                                                ? 14
+                                                : (compactHeight ? 16 : 22),
+                                            veryCompactHeight
+                                                ? 12
+                                                : (compactHeight ? 14 : 22),
+                                            veryCompactHeight
+                                                ? 14
+                                                : (compactHeight ? 16 : 22),
+                                            veryCompactHeight
+                                                ? 10
+                                                : (compactHeight ? 12 : 18),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              TabBar(
+                                                controller: _tabController,
+                                                labelColor: const Color(
+                                                  0xFF0E4C92,
+                                                ),
+                                                unselectedLabelColor:
+                                                    Colors.black54,
+                                                indicatorColor: const Color(
+                                                  0xFF0E4C92,
+                                                ),
+                                                indicatorWeight: 3,
+                                                labelStyle: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
                                                   fontSize: 13,
                                                 ),
-                                            tabs: const [
-                                              Tab(text: 'Password Login'),
-                                              Tab(text: 'OTP Login'),
-                                            ],
-                                          ),
-                                          SizedBox(
-                                            height: compactHeight ? 10 : 14,
-                                          ),
-                                          if (veryCompactHeight)
-                                            DropdownButtonFormField<
-                                              StaffLoginMode
-                                            >(
-                                              value: _staffLoginMode,
-                                              decoration: _inputDecoration(
-                                                'Select login mode',
-                                                Icons.badge_outlined,
+                                                unselectedLabelStyle:
+                                                    const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 13,
+                                                    ),
+                                                tabs: const [
+                                                  Tab(text: 'Password Login'),
+                                                  Tab(text: 'OTP Login'),
+                                                ],
                                               ),
-                                              items: const [
-                                                DropdownMenuItem(
-                                                  value: StaffLoginMode.client,
-                                                  child: Text('Client'),
-                                                ),
-                                                DropdownMenuItem(
-                                                  value:
-                                                      StaffLoginMode.accountant,
-                                                  child: Text('Accountant'),
-                                                ),
-                                                DropdownMenuItem(
-                                                  value:
-                                                      StaffLoginMode.caAuditor,
-                                                  child: Text('CA/Auditor'),
-                                                ),
-                                                DropdownMenuItem(
-                                                  value: StaffLoginMode.admin,
-                                                  child: Text('Admin'),
-                                                ),
-                                              ],
-                                              onChanged: (value) {
-                                                if (value == null) return;
-                                                setState(
-                                                  () => _staffLoginMode = value,
-                                                );
-                                              },
-                                            )
-                                          else
-                                            Wrap(
-                                              spacing: 8,
-                                              runSpacing: 8,
-                                              children: [
-                                                _ModeButton(
-                                                  label: 'Client',
-                                                  icon: Icons.person_outline,
-                                                  selected:
-                                                      _staffLoginMode ==
-                                                      StaffLoginMode.client,
-                                                  onTap: () => setState(
-                                                    () => _staffLoginMode =
-                                                        StaffLoginMode.client,
-                                                  ),
-                                                ),
-                                                _ModeButton(
-                                                  label: 'Accountant',
-                                                  icon:
-                                                      Icons.calculate_outlined,
-                                                  accent: true,
-                                                  selected:
-                                                      _staffLoginMode ==
-                                                      StaffLoginMode.accountant,
-                                                  onTap: () => setState(
-                                                    () => _staffLoginMode =
-                                                        StaffLoginMode
-                                                            .accountant,
-                                                  ),
-                                                ),
-                                                _ModeButton(
-                                                  label: 'CA/Auditor',
-                                                  icon: Icons
-                                                      .verified_user_outlined,
-                                                  selected:
-                                                      _staffLoginMode ==
-                                                      StaffLoginMode.caAuditor,
-                                                  onTap: () => setState(
-                                                    () => _staffLoginMode =
-                                                        StaffLoginMode
-                                                            .caAuditor,
-                                                  ),
-                                                ),
-                                                _ModeButton(
-                                                  label: 'Admin',
-                                                  icon: Icons
-                                                      .admin_panel_settings_outlined,
-                                                  selected:
-                                                      _staffLoginMode ==
-                                                      StaffLoginMode.admin,
-                                                  onTap: () => setState(
-                                                    () => _staffLoginMode =
-                                                        StaffLoginMode.admin,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          if (!veryCompactHeight) ...[
-                                            const SizedBox(height: 10),
-                                            Container(
-                                              width: double.infinity,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 10,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFEDF4FF),
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                                border: Border.all(
-                                                  color: const Color(
-                                                    0xFFCEE0FF,
-                                                  ),
-                                                ),
+                                              SizedBox(
+                                                height: compactHeight ? 10 : 14,
                                               ),
-                                              child: Row(
-                                                children: [
-                                                  const Icon(
-                                                    Icons.info_outline,
-                                                    color: Color(0xFF0E4C92),
-                                                    size: 18,
+                                              if (veryCompactHeight)
+                                                DropdownButtonFormField<
+                                                  StaffLoginMode
+                                                >(
+                                                  value: _staffLoginMode,
+                                                  decoration: _inputDecoration(
+                                                    'Select login mode',
+                                                    Icons.badge_outlined,
                                                   ),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Text(
-                                                      _modeSubtitle,
-                                                      style: const TextStyle(
-                                                        color: Color(
-                                                          0xFF0E4C92,
+                                                  items: const [
+                                                    DropdownMenuItem(
+                                                      value:
+                                                          StaffLoginMode.client,
+                                                      child: Text('Client'),
+                                                    ),
+                                                    DropdownMenuItem(
+                                                      value: StaffLoginMode
+                                                          .accountant,
+                                                      child: Text('Accountant'),
+                                                    ),
+                                                    DropdownMenuItem(
+                                                      value: StaffLoginMode
+                                                          .caAuditor,
+                                                      child: Text('CA/Auditor'),
+                                                    ),
+                                                    DropdownMenuItem(
+                                                      value:
+                                                          StaffLoginMode.admin,
+                                                      child: Text('Admin'),
+                                                    ),
+                                                  ],
+                                                  onChanged: (value) {
+                                                    if (value == null) return;
+                                                    setState(
+                                                      () => _staffLoginMode =
+                                                          value,
+                                                    );
+                                                  },
+                                                )
+                                              else
+                                                Wrap(
+                                                  spacing: 8,
+                                                  runSpacing: 8,
+                                                  children: [
+                                                    _ModeButton(
+                                                      label: 'Client',
+                                                      icon:
+                                                          Icons.person_outline,
+                                                      selected:
+                                                          _staffLoginMode ==
+                                                          StaffLoginMode.client,
+                                                      onTap: () => setState(
+                                                        () => _staffLoginMode =
+                                                            StaffLoginMode
+                                                                .client,
+                                                      ),
+                                                    ),
+                                                    _ModeButton(
+                                                      label: 'Accountant',
+                                                      icon: Icons
+                                                          .calculate_outlined,
+                                                      accent: true,
+                                                      selected:
+                                                          _staffLoginMode ==
+                                                          StaffLoginMode
+                                                              .accountant,
+                                                      onTap: () => setState(
+                                                        () => _staffLoginMode =
+                                                            StaffLoginMode
+                                                                .accountant,
+                                                      ),
+                                                    ),
+                                                    _ModeButton(
+                                                      label: 'CA/Auditor',
+                                                      icon: Icons
+                                                          .verified_user_outlined,
+                                                      selected:
+                                                          _staffLoginMode ==
+                                                          StaffLoginMode
+                                                              .caAuditor,
+                                                      onTap: () => setState(
+                                                        () => _staffLoginMode =
+                                                            StaffLoginMode
+                                                                .caAuditor,
+                                                      ),
+                                                    ),
+                                                    _ModeButton(
+                                                      label: 'Admin',
+                                                      icon: Icons
+                                                          .admin_panel_settings_outlined,
+                                                      selected:
+                                                          _staffLoginMode ==
+                                                          StaffLoginMode.admin,
+                                                      onTap: () => setState(
+                                                        () => _staffLoginMode =
+                                                            StaffLoginMode
+                                                                .admin,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              if (!veryCompactHeight) ...[
+                                                const SizedBox(height: 10),
+                                                Container(
+                                                  width: double.infinity,
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 10,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(
+                                                      0xFFEDF4FF,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          12,
                                                         ),
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.w600,
+                                                    border: Border.all(
+                                                      color: const Color(
+                                                        0xFFCEE0FF,
                                                       ),
                                                     ),
                                                   ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                          SizedBox(
-                                            height: veryCompactHeight
-                                                ? 8
-                                                : (compactHeight ? 10 : 16),
-                                          ),
-                                          Expanded(
-                                            child: TabBarView(
-                                              controller: _tabController,
-                                              children: [
-                                                _PasswordTab(
-                                                  formKey: _passwordFormKey,
-                                                  emailCtrl: _emailCtrl,
-                                                  emailFocusNode:
-                                                      _emailFocusNode,
-                                                  passwordCtrl: _passwordCtrl,
-                                                  passwordFocusNode:
-                                                      _passwordFocusNode,
-                                                  obscurePassword:
-                                                      _obscurePassword,
-                                                  rememberMe: _rememberMe,
-                                                  onTogglePassword: () =>
-                                                      setState(
-                                                        () => _obscurePassword =
-                                                            !_obscurePassword,
+                                                  child: Row(
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.info_outline,
+                                                        color: Color(
+                                                          0xFF0E4C92,
+                                                        ),
+                                                        size: 18,
                                                       ),
-                                                  onToggleRemember: (v) =>
-                                                      setState(
-                                                        () => _rememberMe =
-                                                            v ?? false,
-                                                      ),
-                                                  onForgotPassword: () =>
-                                                      Navigator.push(
-                                                        context,
-                                                        MaterialPageRoute(
-                                                          builder: (_) =>
-                                                              const ForgotPasswordScreen(),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          _modeSubtitle,
+                                                          style:
+                                                              const TextStyle(
+                                                                color: Color(
+                                                                  0xFF0E4C92,
+                                                                ),
+                                                                fontSize: 12,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                              ),
                                                         ),
                                                       ),
-                                                  onLogin: _loginWithPassword,
-                                                  modeLabel: _modeTitle,
-                                                  compact: veryCompactHeight,
-                                                ),
-                                                _OtpTab(
-                                                  formKey: _otpFormKey,
-                                                  mobileCtrl: _mobileCtrl,
-                                                  mobileFocusNode:
-                                                      _mobileFocusNode,
-                                                  onSendOtp: _sendOTP,
-                                                  compact: veryCompactHeight,
+                                                    ],
+                                                  ),
                                                 ),
                                               ],
-                                            ),
+                                              SizedBox(
+                                                height: veryCompactHeight
+                                                    ? 8
+                                                    : (compactHeight ? 10 : 16),
+                                              ),
+                                              Expanded(
+                                                child: TabBarView(
+                                                  controller: _tabController,
+                                                  children: [
+                                                    _PasswordTab(
+                                                      formKey: _passwordFormKey,
+                                                      emailCtrl: _emailCtrl,
+                                                      emailFocusNode:
+                                                          _emailFocusNode,
+                                                      passwordCtrl:
+                                                          _passwordCtrl,
+                                                      passwordFocusNode:
+                                                          _passwordFocusNode,
+                                                      obscurePassword:
+                                                          _obscurePassword,
+                                                      rememberMe: _rememberMe,
+                                                      onTogglePassword: () =>
+                                                          setState(
+                                                            () => _obscurePassword =
+                                                                !_obscurePassword,
+                                                          ),
+                                                      onToggleRemember: (v) =>
+                                                          setState(
+                                                            () => _rememberMe =
+                                                                v ?? false,
+                                                          ),
+                                                      onForgotPassword: () =>
+                                                          Navigator.push(
+                                                            context,
+                                                            MaterialPageRoute(
+                                                              builder: (_) =>
+                                                                  const ForgotPasswordScreen(),
+                                                            ),
+                                                          ),
+                                                      onLogin:
+                                                          _loginWithPassword,
+                                                      modeLabel: _modeTitle,
+                                                      compact:
+                                                          veryCompactHeight,
+                                                    ),
+                                                    _OtpTab(
+                                                      formKey: _otpFormKey,
+                                                      mobileCtrl: _mobileCtrl,
+                                                      mobileFocusNode:
+                                                          _mobileFocusNode,
+                                                      onSendOtp: _sendOTP,
+                                                      compact:
+                                                          veryCompactHeight,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                        ],
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
-                            SizedBox(
-                              height: veryCompactHeight
-                                  ? 6
-                                  : (compactHeight ? 10 : 14),
-                            ),
-                            if (!compactHeight)
-                              Wrap(
-                                alignment: WrapAlignment.center,
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: const [
-                                  _MetaChip(
-                                    icon: Icons.lock_outline,
-                                    label: 'Secure portal',
-                                  ),
-                                  _MetaChip(
-                                    icon: Icons.speed_outlined,
-                                    label: 'Fast login',
-                                  ),
-                                  _MetaChip(
-                                    icon: Icons.auto_awesome_outlined,
-                                    label: 'Auto-entry ready',
-                                  ),
-                                  _MetaChip(
-                                    icon: Icons.chat_bubble_outline,
-                                    label: 'Chat enabled',
-                                  ),
-                                ],
-                              ),
-                            if (!compactHeight) const SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text(
-                                  "Don't have an account? ",
-                                  style: TextStyle(color: Colors.white70),
+                                SizedBox(
+                                  height: veryCompactHeight
+                                      ? 6
+                                      : (compactHeight ? 10 : 14),
                                 ),
-                                GestureDetector(
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const RegisterScreen(),
-                                    ),
+                                if (!compactHeight)
+                                  Wrap(
+                                    alignment: WrapAlignment.center,
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: const [
+                                      _MetaChip(
+                                        icon: Icons.lock_outline,
+                                        label: 'Secure portal',
+                                      ),
+                                      _MetaChip(
+                                        icon: Icons.speed_outlined,
+                                        label: 'Fast login',
+                                      ),
+                                      _MetaChip(
+                                        icon: Icons.auto_awesome_outlined,
+                                        label: 'Auto-entry ready',
+                                      ),
+                                      _MetaChip(
+                                        icon: Icons.chat_bubble_outline,
+                                        label: 'Chat enabled',
+                                      ),
+                                    ],
                                   ),
-                                  child: const Text(
-                                    'Register',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                      decoration: TextDecoration.underline,
+                                if (!compactHeight) const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Text(
+                                      "Don't have an account? ",
+                                      style: TextStyle(color: Colors.white70),
                                     ),
+                                    GestureDetector(
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const RegisterScreen(),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Register',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: veryCompactHeight ? 2 : 6),
+                                const Text(
+                                  'Powered by Chirag Associates',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white70,
                                   ),
                                 ),
                               ],
                             ),
-                            SizedBox(height: veryCompactHeight ? 2 : 6),
-                            const Text(
-                              'Powered by Chirag Accounting System',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -592,7 +635,7 @@ class _LoginScreenState extends State<LoginScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Chirag Accounting System',
+                  'Chirag Associates',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,

@@ -59,7 +59,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     if (user == null) return;
 
     setState(() => _isSendingOtp = true);
-    final ok = await auth.forgotPassword(user.mobile);
+    final ok = await auth.sendPasswordChangeOtp(user.mobile);
     if (!mounted) return;
     setState(() => _isSendingOtp = false);
 
@@ -78,7 +78,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     final auth = context.read<AuthController>();
     setState(() => _isChangingPassword = true);
 
-    final success = await auth.resetPassword(
+    final success = await auth.changePasswordWithFirebaseOtp(
       otp: _otpCtrl.text.trim(),
       newPassword: _newPasswordCtrl.text.trim(),
     );

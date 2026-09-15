@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:chirag_accounting/core/constants/api_constants.dart';
 import 'package:chirag_accounting/features/client_portal/models/client_portal_module.dart';
 import 'package:chirag_accounting/features/client_portal/registry/client_portal_module_registry.dart';
+import 'package:chirag_accounting/features/clients/services/authoritative_client_data_api.dart';
 
 enum ClientPermissionTemplate {
   gst,
@@ -27,12 +29,19 @@ extension ClientPermissionTemplateLabel on ClientPermissionTemplate {
 }
 
 class ClientPortalAccessService extends ChangeNotifier {
-  ClientPortalAccessService({SharedPreferences? preferences})
-    : _preferences = preferences;
+  ClientPortalAccessService({
+    SharedPreferences? preferences,
+    AuthoritativeClientDataApi? clientDataApi,
+    bool? useRemoteApi,
+  }) : _preferences = preferences,
+       _clientDataApi = clientDataApi ?? AuthoritativeClientDataApi(),
+       _useRemoteApi = useRemoteApi ?? !ApiConstants.useMockApi;
 
   static const String storageKey = 'client_portal_access_profiles_v1';
 
   final SharedPreferences? _preferences;
+  final AuthoritativeClientDataApi _clientDataApi;
+  final bool _useRemoteApi;
   final Map<String, ClientPortalAccessProfile> _profiles =
       <String, ClientPortalAccessProfile>{};
   bool _isLoaded = false;
@@ -49,6 +58,37 @@ class ClientPortalAccessService extends ChangeNotifier {
       ..addAll(_decode(encoded));
     _isLoaded = true;
     notifyListeners();
+  }
+
+  Future<void> refreshAuthoritative(String clientId) async {
+    if (!_useRemoteApi || clientId.trim().isEmpty) return;
+    try {
+      cacheAuthoritativeAggregate(
+        await _clientDataApi.loadClient(clientId),
+        notify: false,
+      );
+      await _save();
+    } catch (error) {
+      debugPrint('Unable to refresh client portal access: $error');
+    }
+  }
+
+  void cacheAuthoritativeAggregate(
+    Map<String, dynamic> aggregate, {
+    bool notify = true,
+  }) {
+    final client = aggregate['client'];
+    final access = aggregate['access'];
+    if (client is! Map || access is! Map) return;
+    final clientId = client['id']?.toString().trim() ?? '';
+    if (clientId.isEmpty) return;
+
+    final profile = ClientPortalAccessProfile.fromJson(<String, dynamic>{
+      ...Map<String, dynamic>.from(access),
+      'clientId': clientId,
+    });
+    _profiles[clientId] = profile;
+    if (notify) notifyListeners();
   }
 
   ClientPortalAccessProfile profileFor(String clientId) {
@@ -143,16 +183,17 @@ class ClientPortalAccessService extends ChangeNotifier {
     bool? accountLocked,
     String? subscriptionPlan,
   }) async {
-    final current = profileFor(clientId);
-    _profiles[clientId] = current.copyWith(
-      loginEnabled: loginEnabled,
-      mobileLoginEnabled: mobileLoginEnabled,
-      webLoginEnabled: webLoginEnabled,
-      twoFactorRequired: twoFactorRequired,
-      accountLocked: accountLocked,
-      subscriptionPlan: subscriptionPlan,
+    await _updateProfile(
+      clientId,
+      (current) => current.copyWith(
+        loginEnabled: loginEnabled,
+        mobileLoginEnabled: mobileLoginEnabled,
+        webLoginEnabled: webLoginEnabled,
+        twoFactorRequired: twoFactorRequired,
+        accountLocked: accountLocked,
+        subscriptionPlan: subscriptionPlan,
+      ),
     );
-    await _save();
   }
 
   Future<void> updateWorkflowAccess(
@@ -162,48 +203,48 @@ class ClientPortalAccessService extends ChangeNotifier {
     ClientVoucherEntryMode? purchaseEntryMode,
     ClientVoucherEntryMode? salesEntryMode,
   }) async {
-    final current = profileFor(clientId);
-    final nextBillingMode = billingMode ?? current.billingMode;
-    final modules = <String, ClientModuleAccess>{...current.modules};
+    await _updateProfile(clientId, (current) {
+      final nextBillingMode = billingMode ?? current.billingMode;
+      final modules = <String, ClientModuleAccess>{...current.modules};
 
-    // Keep menus aligned with selected billing model.
-    switch (nextBillingMode) {
-      case ClientBillingMode.imageUploadAccountantEntry:
-        _setModuleEnabled(modules, 'sales', false);
-        _setModuleEnabled(modules, 'purchase', false);
-        _setModuleEnabled(modules, 'uploads', true);
-        _setModuleEnabled(modules, 'document_hub', true);
-        _setModuleEnabled(modules, 'documents', true);
-        _setModuleEnabled(modules, 'ocr', true);
-        _setModuleEnabled(modules, 'voucher_upload', true);
-        _setModuleEnabled(modules, 'chat', true);
-      case ClientBillingMode.fullBillingSoftware:
-        _setModuleEnabled(modules, 'sales', true);
-        _setModuleEnabled(modules, 'purchase', true);
-        _setModuleEnabled(modules, 'uploads', true);
-        _setModuleEnabled(modules, 'document_hub', true);
-        _setModuleEnabled(modules, 'documents', true);
-        _setModuleEnabled(modules, 'ocr', true);
-        _setModuleEnabled(modules, 'voucher_upload', true);
-      case ClientBillingMode.hybrid:
-        _setModuleEnabled(modules, 'sales', true);
-        _setModuleEnabled(modules, 'purchase', true);
-        _setModuleEnabled(modules, 'uploads', true);
-        _setModuleEnabled(modules, 'document_hub', true);
-        _setModuleEnabled(modules, 'documents', true);
-        _setModuleEnabled(modules, 'ocr', true);
-        _setModuleEnabled(modules, 'voucher_upload', true);
-        _setModuleEnabled(modules, 'chat', true);
-    }
+      // Keep menus aligned with selected billing model.
+      switch (nextBillingMode) {
+        case ClientBillingMode.imageUploadAccountantEntry:
+          _setModuleEnabled(modules, 'sales', false);
+          _setModuleEnabled(modules, 'purchase', false);
+          _setModuleEnabled(modules, 'uploads', true);
+          _setModuleEnabled(modules, 'document_hub', true);
+          _setModuleEnabled(modules, 'documents', true);
+          _setModuleEnabled(modules, 'ocr', true);
+          _setModuleEnabled(modules, 'voucher_upload', true);
+          _setModuleEnabled(modules, 'chat', true);
+        case ClientBillingMode.fullBillingSoftware:
+          _setModuleEnabled(modules, 'sales', true);
+          _setModuleEnabled(modules, 'purchase', true);
+          _setModuleEnabled(modules, 'uploads', true);
+          _setModuleEnabled(modules, 'document_hub', true);
+          _setModuleEnabled(modules, 'documents', true);
+          _setModuleEnabled(modules, 'ocr', true);
+          _setModuleEnabled(modules, 'voucher_upload', true);
+        case ClientBillingMode.hybrid:
+          _setModuleEnabled(modules, 'sales', true);
+          _setModuleEnabled(modules, 'purchase', true);
+          _setModuleEnabled(modules, 'uploads', true);
+          _setModuleEnabled(modules, 'document_hub', true);
+          _setModuleEnabled(modules, 'documents', true);
+          _setModuleEnabled(modules, 'ocr', true);
+          _setModuleEnabled(modules, 'voucher_upload', true);
+          _setModuleEnabled(modules, 'chat', true);
+      }
 
-    _profiles[clientId] = current.copyWith(
-      billingMode: nextBillingMode,
-      accountingMode: accountingMode,
-      purchaseEntryMode: purchaseEntryMode,
-      salesEntryMode: salesEntryMode,
-      modules: modules,
-    );
-    await _save();
+      return current.copyWith(
+        billingMode: nextBillingMode,
+        accountingMode: accountingMode,
+        purchaseEntryMode: purchaseEntryMode,
+        salesEntryMode: salesEntryMode,
+        modules: modules,
+      );
+    });
   }
 
   void _setModuleEnabled(
@@ -229,14 +270,15 @@ class ClientPortalAccessService extends ChangeNotifier {
     if (ClientPortalModuleRegistry.find(access.moduleId) == null) {
       throw FormatException('Unknown client module: ${access.moduleId}.');
     }
-    final current = profileFor(clientId);
-    _profiles[clientId] = current.copyWith(
-      modules: <String, ClientModuleAccess>{
-        ...current.modules,
-        access.moduleId: access,
-      },
+    await _updateProfile(
+      clientId,
+      (current) => current.copyWith(
+        modules: <String, ClientModuleAccess>{
+          ...current.modules,
+          access.moduleId: access,
+        },
+      ),
     );
-    await _save();
   }
 
   Future<void> setDashboardWidget(
@@ -244,50 +286,37 @@ class ClientPortalAccessService extends ChangeNotifier {
     String widgetId,
     bool enabled,
   ) async {
-    final current = profileFor(clientId);
-    _profiles[clientId] = current.copyWith(
-      dashboardWidgets: <String, bool>{
-        ...current.dashboardWidgets,
-        widgetId: enabled,
-      },
+    await _updateProfile(
+      clientId,
+      (current) => current.copyWith(
+        dashboardWidgets: <String, bool>{
+          ...current.dashboardWidgets,
+          widgetId: enabled,
+        },
+      ),
     );
-    await _save();
   }
 
   Future<void> updateDocumentHubAccess(
     String clientId,
     ClientDocumentHubAccess access,
   ) async {
-    final current = profileFor(clientId);
-    _profiles[clientId] = current.copyWith(documentHubAccess: access);
-    await _save();
+    await _updateProfile(
+      clientId,
+      (current) => current.copyWith(documentHubAccess: access),
+    );
   }
 
   Future<void> applyTemplate(
     Iterable<String> clientIds,
     ClientPermissionTemplate template,
   ) async {
-    final moduleIds = _templateModules(template);
     for (final clientId in clientIds.toSet()) {
-      final current = profileFor(clientId);
-      final modules = <String, ClientModuleAccess>{...current.modules};
-      for (final definition in registeredModules) {
-        final shouldEnable =
-            template == ClientPermissionTemplate.fullService ||
-            moduleIds.contains(definition.id) ||
-            definition.id == 'dashboard' ||
-            definition.id == 'settings';
-        final existing = modules[definition.id] ?? _defaultAccess(definition);
-        modules[definition.id] = existing.copyWith(
-          enabled: shouldEnable,
-          actions: shouldEnable
-              ? _templateActions(definition.permissionType)
-              : const <ClientModuleAction>{},
-        );
-      }
-      _profiles[clientId] = current.copyWith(modules: modules);
+      await _updateProfile(
+        clientId,
+        (current) => _profileWithTemplate(current, template),
+      );
     }
-    await _save();
   }
 
   Future<void> syncAssignedServices(
@@ -298,28 +327,35 @@ class ClientPortalAccessService extends ChangeNotifier {
         .map((service) => service.trim().toLowerCase())
         .where((service) => service.isNotEmpty)
         .toSet();
-    for (final template in ClientPermissionTemplate.values) {
-      if (template == ClientPermissionTemplate.fullService) continue;
-      final keywords = switch (template) {
-        ClientPermissionTemplate.gst => const <String>{'gst'},
-        ClientPermissionTemplate.accounting => const <String>{
-          'accounting',
-          'accounts',
-        },
-        ClientPermissionTemplate.payroll => const <String>{'payroll', 'salary'},
-        ClientPermissionTemplate.audit => const <String>{'audit'},
-        ClientPermissionTemplate.incomeTax => const <String>{
-          'income tax',
-          'itr',
-        },
-        ClientPermissionTemplate.fullService => const <String>{},
-      };
-      if (normalized.any(
-        (service) => keywords.any((keyword) => service.contains(keyword)),
-      )) {
-        await _enableTemplateModules(clientId, template);
+    await _updateProfile(clientId, (current) {
+      var next = current;
+      for (final template in ClientPermissionTemplate.values) {
+        if (template == ClientPermissionTemplate.fullService) continue;
+        final keywords = switch (template) {
+          ClientPermissionTemplate.gst => const <String>{'gst'},
+          ClientPermissionTemplate.accounting => const <String>{
+            'accounting',
+            'accounts',
+          },
+          ClientPermissionTemplate.payroll => const <String>{
+            'payroll',
+            'salary',
+          },
+          ClientPermissionTemplate.audit => const <String>{'audit'},
+          ClientPermissionTemplate.incomeTax => const <String>{
+            'income tax',
+            'itr',
+          },
+          ClientPermissionTemplate.fullService => const <String>{},
+        };
+        if (normalized.any(
+          (service) => keywords.any((keyword) => service.contains(keyword)),
+        )) {
+          next = _profileWithTemplate(next, template);
+        }
       }
-    }
+      return next;
+    });
   }
 
   ClientPortalAccessProfile _defaultProfile(String clientId) {
@@ -352,11 +388,42 @@ class ClientPortalAccessService extends ChangeNotifier {
     );
   }
 
-  Future<void> _enableTemplateModules(
+  Future<void> _updateProfile(
     String clientId,
-    ClientPermissionTemplate template,
+    ClientPortalAccessProfile Function(ClientPortalAccessProfile current)
+    update,
   ) async {
-    final current = profileFor(clientId);
+    final current = await _profileForMutation(clientId);
+    await _persistProfile(update(current));
+  }
+
+  Future<ClientPortalAccessProfile> _profileForMutation(String clientId) async {
+    if (!_useRemoteApi) return profileFor(clientId);
+    cacheAuthoritativeAggregate(
+      await _clientDataApi.loadClient(clientId),
+      notify: false,
+    );
+    return profileFor(clientId);
+  }
+
+  Future<void> _persistProfile(ClientPortalAccessProfile profile) async {
+    if (!_useRemoteApi) {
+      _profiles[profile.clientId] = profile;
+      await _save();
+      return;
+    }
+    final payload = profile.toJson()..remove('clientId');
+    cacheAuthoritativeAggregate(
+      await _clientDataApi.updateAccess(profile.clientId, payload),
+      notify: false,
+    );
+    await _save();
+  }
+
+  ClientPortalAccessProfile _profileWithTemplate(
+    ClientPortalAccessProfile current,
+    ClientPermissionTemplate template,
+  ) {
     final modules = <String, ClientModuleAccess>{...current.modules};
     for (final moduleId in _templateModules(template)) {
       final definition = ClientPortalModuleRegistry.find(moduleId);
@@ -367,8 +434,7 @@ class ClientPortalAccessService extends ChangeNotifier {
         actions: _templateActions(definition.permissionType),
       );
     }
-    _profiles[clientId] = current.copyWith(modules: modules);
-    await _save();
+    return current.copyWith(modules: modules);
   }
 
   Set<String> _templateModules(ClientPermissionTemplate template) =>

@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 
-import { SqlAuthRepository } from '../repositories/authRepository.js';
+import pool from '../database.js';
 import { hashPassword } from '../services/authService.js';
 
 const name = requiredEnvironmentValue('BOOTSTRAP_ADMIN_NAME');
@@ -14,16 +15,22 @@ if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('BOOTSTRAP_ADMIN_EMAIL is inv
 if (!/^\d{10}$/.test(mobile)) throw new Error('BOOTSTRAP_ADMIN_MOBILE must contain 10 digits.');
 
 const password = generatePassword();
-const repository = new SqlAuthRepository();
-const result = await repository.createBootstrapAdmin({
-  name,
-  email,
-  mobile,
-  firmName,
-  passwordHash: await hashPassword(password),
-});
+const [existingUsers] = await pool.execute<RowDataPacket[]>(
+  'SELECT id FROM users WHERE email = ? OR mobile = ? LIMIT 1',
+  [email, mobile],
+);
+const created = existingUsers.length === 0;
 
-if (result.created) {
+if (created) {
+  await pool.execute<ResultSetHeader>(
+    `INSERT INTO users (
+      name, email, mobile, firm_name, password_hash, role, is_active, must_change_password
+    ) VALUES (?, ?, ?, ?, ?, 'super_admin', 1, 1)`,
+    [name, email, mobile, firmName, await hashPassword(password)],
+  );
+}
+
+if (created) {
   await fs.writeFile(
     outputFile,
     `Email: ${email}\nTemporary password: ${password}\nPassword change required: yes\n`,
@@ -33,6 +40,7 @@ if (result.created) {
 } else {
   console.log(`User ${email} already exists; no credentials were changed.`);
 }
+await pool.end();
 process.exit(0);
 
 function requiredEnvironmentValue(name: string) {

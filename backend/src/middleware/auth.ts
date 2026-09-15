@@ -1,7 +1,11 @@
 import { NextFunction, Request, Response } from 'express';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import jwt from 'jsonwebtoken';
+import type { RowDataPacket } from 'mysql2';
 
-import { env } from '../config/env.js';
+import { env, firebaseServiceAccount } from '../config/env.js';
+import pool from '../database.js';
 import { SecurityContext } from '../types/securityContext.js';
 
 declare global {
@@ -12,39 +16,8 @@ declare global {
   }
 }
 
-interface TokenShape {
-  sub: string;
-  role: SecurityContext['role'];
-  tenant_id: string;
-  company_id: string;
-  branch_id: string;
-  financial_year: string;
-  permissions?: string[];
-}
-
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
-    res.status(401).json({ message: 'Unauthorized' });
-    return;
-  }
-
-  const token = header.slice('Bearer '.length);
-  try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as TokenShape;
-    req.securityContext = {
-      userId: decoded.sub,
-      role: decoded.role,
-      tenantId: decoded.tenant_id,
-      companyId: decoded.company_id,
-      branchId: decoded.branch_id,
-      financialYear: decoded.financial_year,
-      permissions: decoded.permissions ?? [],
-    };
-    next();
-  } catch {
-    res.status(401).json({ message: 'Invalid token' });
-  }
+  return verifyToken(req as AuthRequest, res, next);
 }
 
 export interface AuthRequest extends Request {
@@ -54,20 +27,128 @@ export interface AuthRequest extends Request {
   };
 }
 
-export function verifyToken(req: AuthRequest, res: Response, next: NextFunction) {
-  const token = req.headers.authorization?.split(' ')[1];
+export async function verifyToken(req: AuthRequest, res: Response, next: NextFunction) {
+  const token = bearerToken(req);
   if (!token) {
     res.status(401).json({ message: 'Token not provided.' });
     return;
   }
 
+  let decoded: { id?: unknown };
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as { id: number; role: string };
-    req.user = decoded;
-    next();
+    decoded = jwt.verify(token, env.JWT_SECRET) as { id?: unknown };
   } catch {
-    res.status(401).json({ message: 'Invalid token.' });
+    await authenticateFirebaseBearerToken(token, req, res, next);
+    return;
   }
+
+  const userId = typeof decoded.id === 'number' ? decoded.id : Number(decoded.id);
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    res.status(401).json({ message: 'Invalid token.' });
+    return;
+  }
+
+  try {
+    const user = await activeUserById(userId);
+    if (!user) {
+      res.status(401).json({ message: 'Account is inactive or no longer exists.' });
+      return;
+    }
+    applyAuthenticatedUser(req, user);
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function authenticateFirebaseBearerToken(
+  token: string,
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const user = await verifyFirebaseToken(token);
+    applyAuthenticatedUser(req, user);
+    next();
+  } catch (error) {
+    if (error instanceof AuthenticationFailure) {
+      res.status(401).json({ message: 'Invalid token.' });
+      return;
+    }
+    next(error);
+  }
+}
+
+function bearerToken(req: Request) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return null;
+  const token = header.slice('Bearer '.length).trim();
+  return token || null;
+}
+
+function applyAuthenticatedUser(req: AuthRequest, user: { id: number; role: string }) {
+  req.user = user;
+  setSecurityContext(req, user.id, user.role);
+}
+
+class AuthenticationFailure extends Error {}
+
+async function activeUserById(id: number): Promise<{ id: number; role: string } | null> {
+  const [rows] = await pool.execute<Array<RowDataPacket & { id: number; role: string }>>(
+    'SELECT id, role FROM users WHERE id = ? AND is_active = TRUE LIMIT 1',
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+async function verifyFirebaseToken(token: string): Promise<{ id: number; role: string }> {
+  if (getApps().length === 0) {
+    initializeApp(firebaseServiceAccount ? { credential: cert(firebaseServiceAccount) } : undefined);
+  }
+
+  let decoded: Awaited<ReturnType<ReturnType<typeof getAuth>['verifyIdToken']>>;
+  try {
+    decoded = await getAuth().verifyIdToken(token);
+  } catch {
+    throw new AuthenticationFailure();
+  }
+  const mobile = normalizeMobile(decoded.phone_number ?? '');
+  const email = decoded.email_verified ? decoded.email?.trim().toLowerCase() ?? '' : '';
+  if (!mobile && !email) throw new AuthenticationFailure();
+
+  const [rows] = await pool.execute<Array<RowDataPacket & { id: number; role: string }>>(
+    `SELECT id, role
+     FROM users
+     WHERE is_active = TRUE AND (mobile = ? OR email = ?)
+     LIMIT 1`,
+    [mobile, email],
+  );
+  if (!rows[0]) throw new AuthenticationFailure();
+  return rows[0];
+}
+
+function normalizeMobile(value: string) {
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+}
+
+function setSecurityContext(req: Request, id: number, role: string) {
+  req.securityContext = {
+    userId: String(id),
+    role: role as SecurityContext['role'],
+    tenantId: `user-${id}`,
+    companyId: `client-${id}`,
+    branchId: 'default',
+    financialYear: currentFinancialYear(),
+    permissions: role === 'super_admin' ? ['*'] : [],
+  };
+}
+
+function currentFinancialYear() {
+  const now = new Date();
+  const start = now.getUTCMonth() >= 3 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+  return `${start}-${String(start + 1).slice(-2)}`;
 }
 
 export function isSuperAdmin(req: AuthRequest, res: Response, next: NextFunction) {

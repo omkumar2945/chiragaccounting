@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:chirag_accounting/core/constants/import_template_content.dart';
+import 'package:chirag_accounting/core/utils/file_download.dart';
 import 'package:chirag_accounting/features/compat/screens/client_data_exchange_screen_compat.dart';
 import '../../../services/customer_service.dart';
 import 'add_customer_screen.dart';
@@ -53,12 +53,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final bytes = Uint8List.fromList(utf8.encode(content));
 
     try {
-      await FilePicker.saveFile(
-        dialogTitle: 'Save Import Template',
+      await downloadFile(
         fileName: fileName,
         bytes: bytes,
-        type: FileType.custom,
-        allowedExtensions: [extension],
+        mimeType: extension == 'csv' ? 'text/csv;charset=utf-8' : 'application/json',
       );
 
       if (!mounted) return;

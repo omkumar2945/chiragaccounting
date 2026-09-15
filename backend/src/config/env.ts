@@ -6,6 +6,11 @@ import { z } from 'zod';
 
 dotenv.config();
 
+const optionalNonEmptyString = z.preprocess(
+	(value) => typeof value === 'string' && value.trim().length === 0 ? undefined : value,
+	z.string().min(1).optional(),
+);
+
 const schema = z.object({
 	NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 	PORT: z.coerce.number().default(3000),
@@ -15,13 +20,13 @@ const schema = z.object({
 	DB_USER: z.string().min(1),
 	DB_PASSWORD: z.string().min(1),
 	DB_NAME: z.string().min(1),
-	FIREBASE_SERVICE_ACCOUNT_JSON: z.string().min(1).optional(),
-	FIREBASE_SERVICE_ACCOUNT_PATH: z.string().min(1).optional(),
-	MSSQL_SERVER: z.string().min(1),
+	FIREBASE_SERVICE_ACCOUNT_JSON: optionalNonEmptyString,
+	FIREBASE_SERVICE_ACCOUNT_PATH: optionalNonEmptyString,
+	MSSQL_SERVER: z.string().min(1).optional(),
 	MSSQL_PORT: z.coerce.number().default(1433),
-	MSSQL_DATABASE: z.string().min(1),
-	MSSQL_USER: z.string().min(1),	
-	MSSQL_PASSWORD: z.string().min(1),
+	MSSQL_DATABASE: z.string().min(1).optional(),
+	MSSQL_USER: z.string().min(1).optional(),
+	MSSQL_PASSWORD: z.string().min(1).optional(),
 	MSSQL_ENCRYPT: z.string().default('false'),
 	MSSQL_TRUST_CERT: z.string().default('true'),
 	SMTP_HOST: z.string().min(1).optional(),

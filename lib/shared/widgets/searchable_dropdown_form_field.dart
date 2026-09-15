@@ -38,44 +38,64 @@ class SearchableDropdownFormField<T> extends StatelessWidget {
       autovalidateMode: autovalidateMode,
       builder: (field) {
         final enabled = onChanged != null;
-        final selectedText =
-            field.value == null ? null : itemLabelBuilder(field.value as T);
+        final selectedText = field.value == null
+            ? null
+            : itemLabelBuilder(field.value as T);
 
-        final effectiveDecoration =
-            (decoration ?? const InputDecoration()).copyWith(
-          errorText: field.errorText,
-          suffixIcon: const Icon(Icons.arrow_drop_down),
-          enabled: enabled,
-        );
+        final effectiveDecoration = (decoration ?? const InputDecoration())
+            .copyWith(
+              errorText: field.errorText,
+              suffixIcon: const Icon(Icons.arrow_drop_down),
+              enabled: enabled,
+            );
 
-        return InkWell(
-          onTap: enabled
-              ? () async {
-                  final picked = await _showSearchDialog<T>(
-                    context,
-                    title: dialogTitle ??
-                        effectiveDecoration.labelText ??
-                        'Select option',
-                    items: items,
-                    selected: field.value,
-                    itemLabelBuilder: itemLabelBuilder,
-                    onCreate: onCreate,
-                    createLabel: createLabel,
-                  );
-                  if (picked == null) return;
-                  field.didChange(picked);
-                  onChanged?.call(picked);
-                }
-              : null,
-          child: InputDecorator(
-            decoration: effectiveDecoration,
-            isEmpty: selectedText == null || selectedText.isEmpty,
-            child: Text(
-              selectedText ?? hintText ?? 'Select',
-              style: TextStyle(
-                color: selectedText == null ? Colors.black54 : Colors.black87,
+        Future<void> openPicker() async {
+          if (!enabled) return;
+          final picked = await _showSearchDialog<T>(
+            context,
+            title:
+                dialogTitle ?? effectiveDecoration.labelText ?? 'Select option',
+            items: items,
+            selected: field.value,
+            itemLabelBuilder: itemLabelBuilder,
+            onCreate: onCreate,
+            createLabel: createLabel,
+          );
+          if (picked == null) return;
+          field.didChange(picked);
+          onChanged?.call(picked);
+        }
+
+        return Shortcuts(
+          shortcuts: const <ShortcutActivator, Intent>{
+            SingleActivator(LogicalKeyboardKey.f4): _OpenSelectionIntent(),
+          },
+          child: Actions(
+            actions: <Type, Action<Intent>>{
+              _OpenSelectionIntent: CallbackAction<_OpenSelectionIntent>(
+                onInvoke: (_) {
+                  openPicker();
+                  return null;
+                },
               ),
-              overflow: TextOverflow.ellipsis,
+            },
+            child: FocusableActionDetector(
+              child: InkWell(
+                onTap: enabled ? openPicker : null,
+                child: InputDecorator(
+                  decoration: effectiveDecoration,
+                  isEmpty: selectedText == null || selectedText.isEmpty,
+                  child: Text(
+                    selectedText ?? hintText ?? 'Select',
+                    style: TextStyle(
+                      color: selectedText == null
+                          ? Colors.black54
+                          : Colors.black87,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
             ),
           ),
         );
@@ -91,6 +111,10 @@ class _MoveSelectionIntent extends Intent {
 
 class _SubmitSelectionIntent extends Intent {
   const _SubmitSelectionIntent();
+}
+
+class _OpenSelectionIntent extends Intent {
+  const _OpenSelectionIntent();
 }
 
 Future<T?> _showSearchDialog<T>(
@@ -114,12 +138,12 @@ Future<T?> _showSearchDialog<T>(
         final list = normalized.isEmpty
             ? items
             : items
-                .where(
-                  (item) => itemLabelBuilder(item)
-                      .toLowerCase()
-                      .contains(normalized),
-                )
-                .toList(growable: false);
+                  .where(
+                    (item) => itemLabelBuilder(
+                      item,
+                    ).toLowerCase().contains(normalized),
+                  )
+                  .toList(growable: false);
         return list;
       }
 
@@ -154,7 +178,7 @@ Future<T?> _showSearchDialog<T>(
           return AlertDialog(
             title: Text(title),
             content: SizedBox(
-              width: 460,
+              width: 380,
               child: Shortcuts(
                 shortcuts: const <ShortcutActivator, Intent>{
                   SingleActivator(LogicalKeyboardKey.arrowDown):
@@ -174,12 +198,13 @@ Future<T?> _showSearchDialog<T>(
                         return null;
                       },
                     ),
-                    _SubmitSelectionIntent: CallbackAction<_SubmitSelectionIntent>(
-                      onInvoke: (intent) {
-                        submit();
-                        return null;
-                      },
-                    ),
+                    _SubmitSelectionIntent:
+                        CallbackAction<_SubmitSelectionIntent>(
+                          onInvoke: (intent) {
+                            submit();
+                            return null;
+                          },
+                        ),
                   },
                   child: Focus(
                     autofocus: true,
@@ -205,7 +230,7 @@ Future<T?> _showSearchDialog<T>(
                         ),
                         const SizedBox(height: 10),
                         ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 300),
+                          constraints: const BoxConstraints(maxHeight: 240),
                           child: filtered.isEmpty
                               ? const Center(
                                   child: Padding(
@@ -228,9 +253,9 @@ Future<T?> _showSearchDialog<T>(
                                       dense: true,
                                       selected: highlighted,
                                       tileColor: highlighted
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .primaryContainer
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primaryContainer
                                           : null,
                                       leading: Icon(
                                         isSelected
@@ -239,7 +264,8 @@ Future<T?> _showSearchDialog<T>(
                                         size: 18,
                                       ),
                                       title: Text(label),
-                                      onTap: () => Navigator.of(context).pop(item),
+                                      onTap: () =>
+                                          Navigator.of(context).pop(item),
                                     );
                                   },
                                 ),

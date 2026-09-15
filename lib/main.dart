@@ -171,14 +171,19 @@ class ChiragAccountingApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         title: 'Chirag Accounting',
         scrollBehavior: const AppScrollBehavior(),
-        builder: (context, child) => AppLifecycleStateKeeper(
-          child: _GlobalSelectionShell(
-            child: _KeyboardScrollShell(
-              navigationHistory: appNavigationHistory,
-              child: AuthenticatedSupportChatShell(
+        builder: (context, child) => Shortcuts(
+          shortcuts: const <ShortcutActivator, Intent>{
+            SingleActivator(LogicalKeyboardKey.f4): ActivateIntent(),
+          },
+          child: AppLifecycleStateKeeper(
+            child: _GlobalSelectionShell(
+              child: _KeyboardScrollShell(
                 navigationHistory: appNavigationHistory,
-                navigatorKey: rootNavigatorKey,
-                child: child ?? const SizedBox.shrink(),
+                child: AuthenticatedSupportChatShell(
+                  navigationHistory: appNavigationHistory,
+                  navigatorKey: rootNavigatorKey,
+                  child: child ?? const SizedBox.shrink(),
+                ),
               ),
             ),
           ),
@@ -194,7 +199,27 @@ class ChiragAccountingApp extends StatelessWidget {
             onSurface: const Color(0xFF172033),
           ),
           useMaterial3: true,
-          fontFamily: 'Roboto',
+          fontFamily: 'Arial',
+          dialogTheme: const DialogThemeData(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            elevation: 16,
+            insetPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(8)),
+            ),
+            titleTextStyle: TextStyle(
+              color: Color(0xFF032D60),
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+            contentTextStyle: TextStyle(
+              color: Color(0xFF334155),
+              fontSize: 14,
+              height: 1.45,
+            ),
+            actionsPadding: EdgeInsets.fromLTRB(20, 12, 20, 16),
+          ),
           appBarTheme: const AppBarTheme(
             backgroundColor: Color(0xFF1565C0),
             foregroundColor: Colors.white,
@@ -373,7 +398,14 @@ class _KeyboardScrollShellState extends State<_KeyboardScrollShell> {
   ScrollPosition? _lastHorizontalPosition;
 
   @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addListener(_revealFocusedEditable);
+  }
+
+  @override
   void dispose() {
+    FocusManager.instance.removeListener(_revealFocusedEditable);
     _lastVerticalPosition = null;
     _lastHorizontalPosition = null;
     _focusNode.dispose();
@@ -547,6 +579,24 @@ class _KeyboardScrollShellState extends State<_KeyboardScrollShell> {
     if (!_focusNode.hasFocus) {
       _focusNode.requestFocus();
     }
+  }
+
+  void _revealFocusedEditable() {
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    if (focusContext == null ||
+        focusContext.findAncestorWidgetOfExactType<EditableText>() == null) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !focusContext.mounted) return;
+      Scrollable.ensureVisible(
+        focusContext,
+        alignment: 0.22,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 }
 

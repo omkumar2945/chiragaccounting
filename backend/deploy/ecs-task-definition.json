@@ -28,16 +28,8 @@
           "value": "8080"
         },
         {
-          "name": "MSSQL_PORT",
-          "value": "1433"
-        },
-        {
-          "name": "MSSQL_ENCRYPT",
-          "value": "true"
-        },
-        {
-          "name": "MSSQL_TRUST_CERT",
-          "value": "false"
+          "name": "DB_PORT",
+          "value": "3306"
         },
         {
           "name": "ACCOUNTING_PROVIDER",
@@ -54,20 +46,20 @@
           "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/FIREBASE_SERVICE_ACCOUNT_JSON"
         },
         {
-          "name": "MSSQL_SERVER",
-          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/MSSQL_SERVER"
+          "name": "DB_HOST",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/DB_HOST"
         },
         {
-          "name": "MSSQL_DATABASE",
-          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/MSSQL_DATABASE"
+          "name": "DB_NAME",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/DB_NAME"
         },
         {
-          "name": "MSSQL_USER",
-          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/MSSQL_USER"
+          "name": "DB_USER",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/DB_USER"
         },
         {
-          "name": "MSSQL_PASSWORD",
-          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/MSSQL_PASSWORD"
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:chirag/backend/DB_PASSWORD"
         },
         {
           "name": "ACCOUNTING_API_BASE_URL",

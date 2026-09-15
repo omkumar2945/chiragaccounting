@@ -68,14 +68,15 @@ class _PublicWebsiteScreenState extends State<PublicWebsiteScreen> {
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 1040;
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFF),
+      backgroundColor: Colors.white,
       appBar: AppBar(
         toolbarHeight: 68,
         elevation: 0,
-        backgroundColor: const Color(0xFF062A59),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF032D60),
+        surfaceTintColor: Colors.white,
         titleSpacing: wide ? 28 : 8,
-        title: _Brand(compact: !wide),
+        title: _Brand(dark: true, compact: !wide),
         actions: [
           if (wide) ...[
             _NavLink(
@@ -115,22 +116,19 @@ class _PublicWebsiteScreenState extends State<PublicWebsiteScreen> {
               onTap: () => _scrollTo(_PublicSection.contact),
             ),
           ],
-          TextButton(
-            onPressed: _openLogin,
-            child: const Text('Login', style: TextStyle(color: Colors.white)),
-          ),
+          TextButton(onPressed: _openLogin, child: const Text('Login')),
           Padding(
             padding: const EdgeInsets.only(right: 14),
             child: FilledButton(
               onPressed: _openSignUp,
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFFFC928),
-                foregroundColor: const Color(0xFF102A43),
+                backgroundColor: const Color(0xFF0176D3),
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ),
-              child: Text(wide ? 'Get Started' : 'Start'),
+              child: Text(wide ? 'Try for free' : 'Try free'),
             ),
           ),
         ],
@@ -140,6 +138,7 @@ class _PublicWebsiteScreenState extends State<PublicWebsiteScreen> {
         controller: _scrollController,
         child: Column(
           children: [
+            _ProductRibbon(onTap: _openSignUp),
             _Hero(onLogin: _openLogin, onSignUp: _openSignUp),
             const _TrustStrip(),
             _EcosystemSection(key: _sectionKeys[_PublicSection.about]),
@@ -243,25 +242,32 @@ class _Brand extends StatelessWidget {
         ),
         if (!compact) ...[
           const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Chirag Accounting',
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Chirag Accounting',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-              Text(
-                'Smart Accounting. Better Business.',
-                style: TextStyle(
-                  color: foreground.withValues(alpha: .68),
-                  fontSize: 8,
+                Text(
+                  'Smart Accounting. Better Business.',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: foreground.withValues(alpha: .68),
+                    fontSize: 8,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ],
@@ -280,50 +286,50 @@ class _Hero extends StatelessWidget {
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFFF8FBFF), Color(0xFFEDF5FF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFFFFF), Color(0xFFF1FAFF)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
         ),
       ),
       child: _Bounded(
-        padding: const EdgeInsets.fromLTRB(22, 42, 22, 38),
+        padding: const EdgeInsets.fromLTRB(22, 54, 22, 52),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final copy = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const _Eyebrow(
-                  icon: Icons.auto_awesome,
-                  text: 'DIGITAL ACCOUNTING PLATFORM',
+                  icon: Icons.auto_graph_rounded,
+                  text: 'THE CONNECTED FINANCE PLATFORM',
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 20),
                 const Text.rich(
                   TextSpan(
                     children: [
-                      TextSpan(text: 'Smart Accounting.\n'),
+                      TextSpan(text: 'Grow with a clear\n'),
                       TextSpan(
-                        text: 'Better Business.',
-                        style: TextStyle(color: Color(0xFF2563EB)),
+                        text: 'view of your business.',
+                        style: TextStyle(color: Color(0xFF0176D3)),
                       ),
                     ],
                   ),
                   style: TextStyle(
-                    color: Color(0xFF0C2345),
-                    fontSize: 43,
-                    height: 1.05,
+                    color: Color(0xFF032D60),
+                    fontSize: 48,
+                    height: 1.02,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 const Text(
-                  'One connected platform for accounting, GST, banking, documents, business workflows and collaboration with your CA and accountant.',
+                  'Bring accounting, GST, documents and team workflows into one intelligent workspace. Make every financial decision with confidence.',
                   style: TextStyle(
-                    color: Color(0xFF53657A),
-                    fontSize: 15,
-                    height: 1.55,
+                    color: Color(0xFF42526E),
+                    fontSize: 16,
+                    height: 1.5,
                   ),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 20),
                 const Wrap(
                   spacing: 12,
                   runSpacing: 8,
@@ -334,7 +340,7 @@ class _Hero extends StatelessWidget {
                     _CheckLabel('CA connected'),
                   ],
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 26),
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
@@ -342,16 +348,16 @@ class _Hero extends StatelessWidget {
                     FilledButton.icon(
                       onPressed: onSignUp,
                       icon: const Icon(Icons.arrow_forward, size: 17),
-                      label: const Text('Start Free'),
+                      label: const Text('Start your free trial'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF1769E0),
+                        backgroundColor: const Color(0xFF0176D3),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
+                          horizontal: 22,
                           vertical: 16,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                       ),
                     ),
@@ -360,14 +366,14 @@ class _Hero extends StatelessWidget {
                       icon: const Icon(Icons.login_rounded, size: 17),
                       label: const Text('Login'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF1769E0),
+                        foregroundColor: const Color(0xFF0176D3),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
                           vertical: 16,
                         ),
-                        side: const BorderSide(color: Color(0xFF1769E0)),
+                        side: const BorderSide(color: Color(0xFF0176D3)),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                       ),
                     ),
@@ -384,7 +390,7 @@ class _Hero extends StatelessWidget {
             return Row(
               children: [
                 Expanded(flex: 5, child: copy),
-                const SizedBox(width: 36),
+                const SizedBox(width: 46),
                 const Expanded(flex: 6, child: _HeroDashboard()),
               ],
             );
@@ -401,8 +407,19 @@ class _HeroDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: _cardDecoration,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFC9E4F7)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1F032D60),
+            blurRadius: 28,
+            offset: Offset(0, 14),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -412,13 +429,13 @@ class _HeroDashboard extends StatelessWidget {
                 child: Text(
                   'Business Overview',
                   style: TextStyle(
-                    color: Color(0xFF102A43),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
+                    color: Color(0xFF032D60),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 17,
                   ),
                 ),
               ),
-              _Pill('ILLUSTRATIVE VIEW'),
+              _Pill('LIVE WORKSPACE'),
             ],
           ),
           const SizedBox(height: 14),
@@ -618,7 +635,8 @@ class _UniversalBusinessTemplateSection extends StatelessWidget {
           _TemplateExample(
             icon: Icons.storefront_outlined,
             title: 'Trading & Retail',
-            detail: 'Sales, Purchase, Receipt, Payment and Credit Note vouchers.',
+            detail:
+                'Sales, Purchase, Receipt, Payment and Credit Note vouchers.',
             color: Color(0xFF0F766E),
           ),
           _TemplateExample(
@@ -630,7 +648,8 @@ class _UniversalBusinessTemplateSection extends StatelessWidget {
           _TemplateExample(
             icon: Icons.precision_manufacturing_outlined,
             title: 'Manufacturing',
-            detail: 'Sales, Purchase, Stock Journal and Manufacturing vouchers.',
+            detail:
+                'Sales, Purchase, Stock Journal and Manufacturing vouchers.',
             color: Color(0xFFB45309),
           ),
         ];
@@ -2177,7 +2196,52 @@ class _NavLink extends StatelessWidget {
     onPressed: onTap,
     child: Text(
       label,
-      style: const TextStyle(color: Color(0xFFDCEBFF), fontSize: 11),
+      style: const TextStyle(
+        color: Color(0xFF032D60),
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
+}
+
+class _ProductRibbon extends StatelessWidget {
+  const _ProductRibbon({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    color: const Color(0xFF032D60),
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+    child: Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 12,
+      runSpacing: 4,
+      children: [
+        const Text(
+          'Chirag Accounting brings your business and finance team together.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        TextButton(
+          onPressed: onTap,
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          ),
+          child: const Text(
+            'Explore the platform',
+            style: TextStyle(decoration: TextDecoration.underline),
+          ),
+        ),
+      ],
     ),
   );
 }

@@ -340,7 +340,13 @@ class _AccountantDashboardScreenState extends State<AccountantDashboardScreen> {
       workbenchBuilder: (_) => const AiWorkbenchScreen(),
       ocrBuilder: (_) => const OcrModuleScreen(),
       showGstWork: PermissionMatrix.canAccess(user.role, AppModule.gst),
-      gstWorkBuilder: (_) => const AccountantGstWorkbenchScreen(),
+      gstWorkBuilder: (_) => const AccountantGstWorkbenchScreen(
+        key: ValueKey('accountant-gst-workbench'),
+      ),
+      itcReconciliationBuilder: (_) => const AccountantGstWorkbenchScreen(
+        key: ValueKey('accountant-itc-reconciliation'),
+        initialSection: 'ITC Reconciliation',
+      ),
       eInvoiceBuilder: (_) => const GstDocumentOperationsScreen.eInvoice(),
       eWayBillBuilder: (_) => const GstDocumentOperationsScreen.eWayBill(),
       clientAccountingBuilder: (_) => const ClientAccountingWorkspaceScreen(),

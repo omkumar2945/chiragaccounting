@@ -115,6 +115,17 @@ class FirebaseRuntimeService extends ChangeNotifier {
       );
       return;
     }
+    if (kIsWeb && FirebaseEnvironmentOptions.webVapidKey.isEmpty) {
+      _statuses['Cloud Messaging'] = const FirebaseFeatureStatus(
+        FirebaseFeatureState.notConfigured,
+        'Firebase Cloud Messaging is not configured for web.',
+      );
+      _statuses['Push Notification Status'] = const FirebaseFeatureStatus(
+        FirebaseFeatureState.notConfigured,
+        'Web push notifications are not configured.',
+      );
+      return;
+    }
     try {
       final settings = await FirebaseMessaging.instance.requestPermission();
       final allowed =
@@ -170,6 +181,13 @@ class FirebaseRuntimeService extends ChangeNotifier {
       _statuses['Analytics'] = const FirebaseFeatureStatus(
         FirebaseFeatureState.unsupported,
         'Firebase Analytics is not supported on Windows.',
+      );
+      return;
+    }
+    if (FirebaseEnvironmentOptions.measurementId.isEmpty) {
+      _statuses['Analytics'] = const FirebaseFeatureStatus(
+        FirebaseFeatureState.notConfigured,
+        'Firebase Analytics is not configured for this app.',
       );
       return;
     }

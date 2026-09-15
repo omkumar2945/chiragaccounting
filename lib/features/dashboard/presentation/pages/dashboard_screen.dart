@@ -154,6 +154,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DashboardController>().loadDashboard();
+      final user = context.read<AuthController>().currentUser;
+      if (user?.role.isClient ?? false) {
+        unawaited(
+          context.read<ClientPortalAccessService>().refreshAuthoritative(
+            user!.id,
+          ),
+        );
+      }
     });
   }
 
@@ -234,12 +242,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final desktopClient =
         isClientUser && MediaQuery.sizeOf(context).width >= 800;
     final selectedClientModule =
-      desktopClient && _selectedClientSidebarItem != 'dashboard'
-      ? visibleClientModules.cast<ClientModuleDefinition?>().firstWhere(
-        (module) => module?.id == _selectedClientSidebarItem,
-        orElse: () => null,
-        )
-      : null;
+        desktopClient && _selectedClientSidebarItem != 'dashboard'
+        ? visibleClientModules.cast<ClientModuleDefinition?>().firstWhere(
+            (module) => module?.id == _selectedClientSidebarItem,
+            orElse: () => null,
+          )
+        : null;
     final configuredPeriod = context.watch<AccountingPolicyService?>()?.period;
     final now = DateTime.now();
     final currentFinancialYearStart = now.month >= DateTime.april
@@ -488,9 +496,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   )
                 : selectedClientModule != null
                 ? KeyedSubtree(
-                    key: ValueKey(
-                      'client-content-${selectedClientModule.id}',
-                    ),
+                    key: ValueKey('client-content-${selectedClientModule.id}'),
                     child: selectedClientModule.builder(context),
                   )
                 : isClientUser && user != null
@@ -707,8 +713,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         message: 'Expand menu',
                         child: InkWell(
                           key: const ValueKey('client-sidebar-collapse'),
-                            onTap: () =>
-                                setState(() => _clientSidebarCollapsed = false),
+                          onTap: () =>
+                              setState(() => _clientSidebarCollapsed = false),
                           child: const SizedBox(
                             height: 48,
                             width: double.infinity,
@@ -734,7 +740,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           style: TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                         onTap: () =>
-                          setState(() => _clientSidebarCollapsed = true),
+                            setState(() => _clientSidebarCollapsed = true),
                       ),
               ),
             ),
@@ -887,9 +893,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
-            child: Material(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
+          child: Material(
             color: hasSelected ? const Color(0xFF132F52) : Colors.transparent,
             borderRadius: BorderRadius.circular(7),
             child: InkWell(
@@ -943,25 +949,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
-            ),
           ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: expanded
-                ? Column(
-                    children: [
-                      for (final module in group.modules)
-                        _clientDesktopModuleTile(
-                          context,
-                          module,
-                          parentGroup: group.name,
-                        ),
-                    ],
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: expanded
+              ? Column(
+                  children: [
+                    for (final module in group.modules)
+                      _clientDesktopModuleTile(
+                        context,
+                        module,
+                        parentGroup: group.name,
+                      ),
+                  ],
+                )
+              : const SizedBox(width: double.infinity),
+        ),
       ],
     );
   }
@@ -970,8 +976,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     BuildContext context,
     ClientModuleDefinition module, {
     String? parentGroup,
-  }
-  ) {
+  }) {
     return _clientDesktopNavTile(
       icon: module.icon,
       label: module.displayName,

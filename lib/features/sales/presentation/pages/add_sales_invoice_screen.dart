@@ -457,11 +457,14 @@ class _AddSalesInvoiceScreenState extends State<AddSalesInvoiceScreen> {
     final normalizedCode = productCode?.trim().toLowerCase() ?? '';
 
     for (final product in candidates) {
-      final nameMatches = normalizedName.isNotEmpty &&
+      final nameMatches =
+          normalizedName.isNotEmpty &&
           product.productName.trim().toLowerCase() == normalizedName;
-      final hsnMatches = normalizedHsn.isNotEmpty &&
+      final hsnMatches =
+          normalizedHsn.isNotEmpty &&
           product.hsnCode.trim().toLowerCase() == normalizedHsn;
-      final codeMatches = normalizedCode.isNotEmpty &&
+      final codeMatches =
+          normalizedCode.isNotEmpty &&
           product.productCode.trim().toLowerCase() == normalizedCode;
 
       if (nameMatches || hsnMatches || codeMatches) {
@@ -1545,7 +1548,9 @@ class _AddSalesInvoiceScreenState extends State<AddSalesInvoiceScreen> {
         _cachePreviewSource(
           filePath: first.path,
           bytes: first.bytes,
-          fileName: first.name.trim().isEmpty ? 'attachment' : first.name.trim(),
+          fileName: first.name.trim().isEmpty
+              ? 'attachment'
+              : first.name.trim(),
           isPdf: first.extension?.toLowerCase() == 'pdf',
         );
       }
@@ -1805,7 +1810,8 @@ class _AddSalesInvoiceScreenState extends State<AddSalesInvoiceScreen> {
   });
 
   Future<bool> _validateUploadedBusiness(ParsedInvoiceData parsed) async {
-    final hasUsefulData = parsed.rawText.trim().isNotEmpty ||
+    final hasUsefulData =
+        parsed.rawText.trim().isNotEmpty ||
         parsed.partyName.trim().isNotEmpty ||
         parsed.gstin.trim().isNotEmpty ||
         parsed.billNumber.trim().isNotEmpty ||
@@ -1814,7 +1820,9 @@ class _AddSalesInvoiceScreenState extends State<AddSalesInvoiceScreen> {
     if (!hasUsefulData && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No invoice data could be read from the attached file.'),
+          content: Text(
+            'No invoice data could be read from the attached file.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -1860,25 +1868,29 @@ class _AddSalesInvoiceScreenState extends State<AddSalesInvoiceScreen> {
       }
     }
 
-    final parsedRows = parsed.items.map((item) {
-      final master = _resolveMasterProduct(
-        productName: item.name,
-        hsnCode: item.hsnCode,
-      );
-      return ProductRow(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        productCode: master?.productCode ?? '',
-        productName: item.name,
-        description: item.description,
-        hsnCode: item.hsnCode.isEmpty ? master?.hsnCode : item.hsnCode,
-        unit: item.unit.isEmpty ? master?.unit : item.unit,
-        quantity: item.quantity,
-        rate: item.rate,
-        extractedAmount: item.amount > 0 ? item.amount : null,
-        gstPercentage: item.gstPercentage > 0 ? item.gstPercentage : master?.gstPercentage ?? 18,
-        taxCodeVerified: master != null || item.hsnCode.trim().isNotEmpty,
-      );
-    }).toList(growable: false);
+    final parsedRows = parsed.items
+        .map((item) {
+          final master = _resolveMasterProduct(
+            productName: item.name,
+            hsnCode: item.hsnCode,
+          );
+          return ProductRow(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            productCode: master?.productCode ?? '',
+            productName: item.name,
+            description: item.description,
+            hsnCode: item.hsnCode.isEmpty ? master?.hsnCode : item.hsnCode,
+            unit: item.unit.isEmpty ? master?.unit : item.unit,
+            quantity: item.quantity,
+            rate: item.rate,
+            extractedAmount: item.amount > 0 ? item.amount : null,
+            gstPercentage: item.gstPercentage > 0
+                ? item.gstPercentage
+                : master?.gstPercentage ?? 18,
+            taxCodeVerified: master != null || item.hsnCode.trim().isNotEmpty,
+          );
+        })
+        .toList(growable: false);
 
     setState(() {
       if (parsedRows.isNotEmpty) {
@@ -4306,7 +4318,10 @@ class _AddSalesInvoiceScreenState extends State<AddSalesInvoiceScreen> {
 
       final clientProfile = user == null
           ? null
-          : await ClientProfileService().load(user.id);
+          : await ClientProfileService().load(
+              user.id,
+              useAuthoritativeClientApi: user.role.isClient,
+            );
       if (!mounted) return;
       final sellerAddress = <String>[
         if (clientProfile?.address.trim().isNotEmpty == true)
@@ -4444,7 +4459,9 @@ class _AddSalesInvoiceScreenState extends State<AddSalesInvoiceScreen> {
     _ewayBillNoCtrl.clear();
     _ewayBillDateCtrl.clear();
     _notesCtrl.clear();
-    _products = <ProductRow>[ProductRow(id: DateTime.now().microsecondsSinceEpoch.toString())];
+    _products = <ProductRow>[
+      ProductRow(id: DateTime.now().microsecondsSinceEpoch.toString()),
+    ];
     _attachmentPaths = <String>[];
     _previewBytes = null;
     _previewFilePath = null;

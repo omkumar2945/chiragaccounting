@@ -58,6 +58,8 @@ class AuthService {
   // ── Mock data (used only when useMockApi == true) ──────────────
 
   static final Map<String, String> _otpStore = {};
+  static final Map<String, String> _passwordResetChallenges = {};
+  static final Map<String, String> _passwordResetTokens = {};
 
   static final List<UserModel> _mockUsers = [
     UserModel(
@@ -174,11 +176,6 @@ class AuthService {
       }
       final otp = (100000 + Random().nextInt(900000)).toString();
       _otpStore[mobile] = otp;
-      assert(() {
-        // ignore: avoid_print
-        print('[MOCK] OTP for $mobile → $otp');
-        return true;
-      }());
       return;
     }
     try {
@@ -355,59 +352,112 @@ class AuthService {
     }
   }
 
-  Future<void> forgotPassword(String emailOrMobile) async {
+  Future<String> forgotPassword(String emailOrMobile) async {
+    final identifier = _normalizeIdentifier(emailOrMobile);
     if (ApiConstants.useMockApi) {
       await Future.delayed(const Duration(seconds: 1));
-      final key = emailOrMobile.toLowerCase().trim();
       final exists = _mockUsers.any(
-          (u) => u.email == key || u.mobile == emailOrMobile.trim());
+          (u) => u.email == identifier || u.mobile == identifier);
       if (!exists) {
         throw const AuthException(
             'No account found with this email or mobile.');
       }
       final otp = (100000 + Random().nextInt(900000)).toString();
-      _otpStore[emailOrMobile.trim()] = otp;
-      assert(() {
-        // ignore: avoid_print
-        print('[MOCK] Reset OTP for ${emailOrMobile.trim()} → $otp');
-        return true;
-      }());
-      return;
+      final challengeId =
+          'mock-reset-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
+      _otpStore[identifier] = otp;
+      _passwordResetChallenges[challengeId] = identifier;
+      return challengeId;
     }
     try {
-      await _dio.post(ApiConstants.forgotPassword,
+      final response = await _dio.post(ApiConstants.forgotPassword,
           data: {
-            'identifier': emailOrMobile.trim(),
-            'emailOrMobile': emailOrMobile.trim(),
+            'identifier': identifier,
+            'emailOrMobile': identifier,
           });
+      final data = response.data;
+      final challengeId = data is Map ? data['challengeId']?.toString() : null;
+      if (challengeId == null || challengeId.isEmpty) {
+        throw const AuthException('Password reset could not be initiated.');
+      }
+      return challengeId;
+    } on DioException catch (e) {
+      throw AuthException(ApiError.fromDioException(e).message);
+    }
+  }
+
+  Future<String> verifyPasswordResetOtp({
+    required String challengeId,
+    required String otp,
+  }) async {
+    if (ApiConstants.useMockApi) {
+      await Future.delayed(const Duration(seconds: 1));
+      final identifier = _passwordResetChallenges[challengeId];
+      final stored = identifier == null ? null : _otpStore[identifier];
+      if (identifier == null || stored == null || stored != otp) {
+        throw const AuthException('Invalid or expired OTP.');
+      }
+      _passwordResetChallenges.remove(challengeId);
+      _otpStore.remove(identifier);
+      final resetToken =
+          'mock-reset-token-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
+      _passwordResetTokens[resetToken] = identifier;
+      return resetToken;
+    }
+    try {
+      final response = await _dio.post(
+        ApiConstants.loginOtpVerify,
+        data: {'challengeId': challengeId, 'otp': otp},
+      );
+      final data = response.data;
+      final resetToken = data is Map ? data['resetToken']?.toString() : null;
+      if (resetToken == null || resetToken.isEmpty) {
+        throw const AuthException('OTP verification did not authorize a password reset.');
+      }
+      return resetToken;
     } on DioException catch (e) {
       throw AuthException(ApiError.fromDioException(e).message);
     }
   }
 
   Future<void> resetPassword({
-    required String emailOrMobile,
-    required String otp,
+    required String resetToken,
     required String newPassword,
   }) async {
     if (ApiConstants.useMockApi) {
       await Future.delayed(const Duration(seconds: 1));
-      final stored = _otpStore[emailOrMobile.trim()];
-      if (stored == null || stored != otp) {
-        throw const AuthException('Invalid or expired OTP.');
+      final identifier = _passwordResetTokens.remove(resetToken);
+      if (identifier == null) {
+        throw const AuthException('Invalid or expired password reset authorization.');
       }
-      _otpStore.remove(emailOrMobile.trim());
-      final key = emailOrMobile.toLowerCase().trim();
-      _passwordStore[key] = _hashPassword(newPassword);
+      final user = _mockUsers.firstWhere(
+        (item) => item.email == identifier || item.mobile == identifier,
+        orElse: () => throw const AuthException('User not found.'),
+      );
+      final passwordHash = _hashPassword(newPassword);
+      _passwordStore[user.email] = passwordHash;
+      _passwordStore[user.mobile] = passwordHash;
       return;
     }
     try {
       await _dio.post(ApiConstants.resetPassword, data: {
-        'identifier': emailOrMobile.trim(),
-        'emailOrMobile': emailOrMobile.trim(),
-        'otp': otp,
+        'resetToken': resetToken,
         'newPassword': newPassword,
       });
+    } on DioException catch (e) {
+      throw AuthException(ApiError.fromDioException(e).message);
+    }
+  }
+
+  Future<void> changePasswordWithFirebaseOtp({
+    required String idToken,
+    required String newPassword,
+  }) async {
+    try {
+      await _dio.post(
+        ApiConstants.firebasePasswordChange,
+        data: {'idToken': idToken, 'newPassword': newPassword},
+      );
     } on DioException catch (e) {
       throw AuthException(ApiError.fromDioException(e).message);
     }

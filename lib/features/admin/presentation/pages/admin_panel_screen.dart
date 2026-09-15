@@ -26,8 +26,10 @@ import 'package:chirag_accounting/features/hr/presentation/pages/hr_management_s
 import 'package:chirag_accounting/features/operations_center/presentation/pages/ca_compliance_review_center_screen.dart';
 import 'package:chirag_accounting/features/operations_center/services/operations_center_service.dart';
 import 'package:chirag_accounting/features/roles/models/role_model.dart';
+import 'package:chirag_accounting/features/authentication/models/user_model.dart';
 import 'package:chirag_accounting/features/authentication/presentation/pages/login_screen.dart';
 import 'package:chirag_accounting/features/business_templates/presentation/pages/client_accounting_workspace_screen.dart';
+import 'package:chirag_accounting/shared/widgets/branding/chirag_associates_logo.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -39,9 +41,12 @@ class AdminPanelScreen extends StatefulWidget {
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   String? _selectedSectionTitle;
   Widget? _activeWorkspace;
   String _activeWorkspaceTitle = 'Overview';
+  bool _sidebarCollapsed = false;
+  bool _mobileSearchOpen = false;
 
   static const String _featureGstLibrary = 'Full GST Act 2017 with Amendments';
   static const String _featureGstNoticeUpload =
@@ -584,29 +589,31 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final query = _searchCtrl.text.trim().toLowerCase();
-    final filtered = _sections
-        .where((section) {
-          if (query.isEmpty) return true;
-          if (section.title.toLowerCase().contains(query)) return true;
-          return section.items.any(
-            (item) => item.toLowerCase().contains(query),
-          );
-        })
-        .toList(growable: false);
+    final filtered = _filteredSections(query);
+    final matchingClients = _filterClientDirectory(
+      context.watch<AdminUserService?>()?.users ?? const <UserModel>[],
+      query,
+    );
 
-    final desktop = MediaQuery.sizeOf(context).width >= 1050;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final desktop = screenWidth >= 1050;
+    final extendedHeader = screenWidth >= 1380;
+    final showSearchWorkspace =
+        query.isNotEmpty || (!desktop && _mobileSearchOpen);
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF3F6FA),
       drawer: desktop ? null : Drawer(child: _adminSidebar()),
       appBar: AppBar(
         toolbarHeight: 68,
+        titleSpacing: desktop ? 16 : 8,
         leading: desktop
             ? null
             : IconButton(
@@ -617,66 +624,31 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         title: Row(
           children: [
             if (desktop) ...[
-              _brandTitle(),
-              const SizedBox(width: 18),
               SizedBox(
-                width: 140,
+                width: extendedHeader ? 350 : 168,
+                child: _brandTitle(extended: extendedHeader),
+              ),
+              SizedBox(width: extendedHeader ? 16 : 12),
+              SizedBox(
+                width: extendedHeader ? 150 : 104,
                 child: Text(
                   _activeWorkspaceTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 15),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  onChanged: (_) => setState(() {}),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                  decoration: InputDecoration(
-                    hintText: 'Search modules, users, reports, permissions',
-                    hintStyle: const TextStyle(
-                      color: Color(0xFFB8CCE3),
-                      fontSize: 11,
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      color: Color(0xFFD7E5F3),
-                      size: 18,
-                    ),
-                    filled: true,
-                    fillColor: const Color(0xFF164B84),
-                    isDense: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(7),
-                      borderSide: BorderSide.none,
-                    ),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
+              Expanded(child: _headerSearchField()),
             ] else
               const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'CHIRAG ASSOCIATES',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      'Administration Console',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 9, color: Color(0xFFC8DAED)),
-                    ),
-                  ],
+                child: ChiragAssociatesLogo(
+                  compact: true,
+                  onDark: true,
+                  showTagline: false,
                 ),
               ),
           ],
@@ -684,8 +656,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         backgroundColor: const Color(0xFF073B78),
         foregroundColor: Colors.white,
         actions: [
+          if (!desktop)
+            IconButton(
+              key: const ValueKey('admin-mobile-search'),
+              tooltip: 'Search administration',
+              onPressed: _openMobileSearch,
+              icon: const Icon(Icons.search_rounded),
+            ),
           if (desktop) ...[
-            _financialYearAction(),
+            _financialYearAction(compact: !extendedHeader),
             const SizedBox(width: 6),
             IconButton(
               tooltip: 'Notifications',
@@ -708,84 +687,102 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       ),
       body: Row(
         children: [
-          if (desktop) SizedBox(width: 244, child: _adminSidebar()),
+          if (desktop)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              width: _sidebarCollapsed ? 72 : 244,
+              child: _adminSidebar(collapsed: _sidebarCollapsed),
+            ),
           Expanded(
-            child:
-                _activeWorkspace ??
-                Column(
-                  children: [
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+            child: showSearchWorkspace
+                ? _searchWorkspace(
+                    filtered,
+                    matchingClients: matchingClients,
+                    desktop: desktop,
+                  )
+                : (_activeWorkspace ??
+                      Column(
                         children: [
-                          if (query.isNotEmpty ||
-                              _selectedSectionTitle != null) ...[
-                            _dashboardHeading(),
-                            const SizedBox(height: 16),
-                          ],
-                          if (!desktop) _searchField(),
-                          if (query.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            _searchHierarchy(filtered),
-                          ] else if (_selectedSectionTitle != null) ...[
-                            const SizedBox(height: 20),
-                            _sectionDashboard(
-                              _sections.firstWhere(
-                                (section) =>
-                                    section.title == _selectedSectionTitle,
+                          Expanded(
+                            child: ListView(
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                18,
+                                20,
+                                28,
                               ),
+                              children: [
+                                if (_selectedSectionTitle != null) ...[
+                                  _dashboardHeading(),
+                                  const SizedBox(height: 16),
+                                ],
+                                if (_selectedSectionTitle != null) ...[
+                                  const SizedBox(height: 20),
+                                  _sectionDashboard(
+                                    _sections.firstWhere(
+                                      (section) =>
+                                          section.title ==
+                                          _selectedSectionTitle,
+                                    ),
+                                  ),
+                                ] else ...[
+                                  const SizedBox(height: 20),
+                                  _enterpriseOverview(),
+                                ],
+                              ],
                             ),
-                          ] else ...[
-                            const SizedBox(height: 20),
-                            _enterpriseOverview(),
-                          ],
+                          ),
                         ],
-                      ),
-                    ),
-                  ],
-                ),
+                      )),
           ),
         ],
       ),
     );
   }
 
-  Widget _adminSidebar() => ColoredBox(
+  Widget _adminSidebar({bool collapsed = false}) => ColoredBox(
     color: const Color(0xFF082F63),
     child: SafeArea(
       child: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 18, 16, 14),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.balance_outlined,
-                  color: Color(0xFFFFCF66),
-                  size: 28,
-                ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Column(
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              collapsed ? 14 : 16,
+              18,
+              collapsed ? 14 : 16,
+              14,
+            ),
+            child: collapsed
+                ? const Center(
+                    child: ChiragAssociatesLogo(
+                      compact: true,
+                      onDark: true,
+                      showName: false,
+                      showTagline: false,
+                    ),
+                  )
+                : const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'CHIRAG ASSOCIATES',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                        ),
+                      ChiragAssociatesLogo(
+                        compact: true,
+                        onDark: true,
+                        showTagline: false,
                       ),
+                      SizedBox(height: 5),
                       Text(
-                        'Administration & Governance',
-                        style: TextStyle(color: Color(0xFF9EB8D7), fontSize: 9),
+                        'Administration Console',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Color(0xFFB8CCE3),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
           ),
           const Divider(height: 1, color: Color(0xFF244B78)),
           Expanded(
@@ -795,25 +792,29 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 _adminSidebarItem(
                   label: 'Overview',
                   icon: Icons.space_dashboard_outlined,
+                  collapsed: collapsed,
                   selected:
                       _activeWorkspace == null && _selectedSectionTitle == null,
                   onTap: _openAdminOverview,
                 ),
-                const _AdminSidebarLabel('CORE MANAGEMENT'),
+                if (!collapsed) const _AdminSidebarLabel('CORE MANAGEMENT'),
                 for (final section in _sections.take(9))
                   _adminSidebarItem(
                     label: section.title,
                     icon: section.icon,
+                    collapsed: collapsed,
                     selected:
                         _activeWorkspace == null &&
                         _selectedSectionTitle == section.title,
                     onTap: () => _openAdminSection(section),
                   ),
-                const _AdminSidebarLabel('GOVERNANCE & OPERATIONS'),
+                if (!collapsed)
+                  const _AdminSidebarLabel('GOVERNANCE & OPERATIONS'),
                 for (final section in _sections.skip(9))
                   _adminSidebarItem(
                     label: section.title,
                     icon: section.icon,
+                    collapsed: collapsed,
                     selected:
                         _activeWorkspace == null &&
                         _selectedSectionTitle == section.title,
@@ -822,17 +823,41 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               ],
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.all(14),
-            child: Text(
-              'ENTERPRISE COMMAND CENTER',
-              style: TextStyle(
-                color: Color(0xFF7696BA),
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
+          if (!collapsed)
+            const Padding(
+              padding: EdgeInsets.all(14),
+              child: Text(
+                'ENTERPRISE COMMAND CENTER',
+                style: TextStyle(
+                  color: Color(0xFF7696BA),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          ),
+          if (MediaQuery.sizeOf(context).width >= 1050) ...[
+            const Divider(height: 1, color: Color(0xFF244B78)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+              child: Align(
+                alignment: collapsed ? Alignment.center : Alignment.centerRight,
+                child: IconButton(
+                  key: const ValueKey('admin-sidebar-collapse'),
+                  tooltip: collapsed
+                      ? 'Expand navigation'
+                      : 'Collapse navigation',
+                  onPressed: () =>
+                      setState(() => _sidebarCollapsed = !_sidebarCollapsed),
+                  icon: Icon(
+                    collapsed
+                        ? Icons.keyboard_double_arrow_right_rounded
+                        : Icons.keyboard_double_arrow_left_rounded,
+                    color: Colors.white70,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     ),
@@ -841,6 +866,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Widget _adminSidebarItem({
     required String label,
     required IconData icon,
+    required bool collapsed,
     required bool selected,
     required VoidCallback onTap,
   }) => Padding(
@@ -848,24 +874,32 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     child: Material(
       color: selected ? const Color(0xFF165DA8) : Colors.transparent,
       borderRadius: BorderRadius.circular(6),
-      child: ListTile(
-        key: ValueKey('admin-nav-${label.toLowerCase().replaceAll(' ', '-')}'),
-        dense: true,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        leading: Icon(
-          icon,
-          color: selected ? Colors.white : const Color(0xFFB8CCE3),
-          size: 18,
-        ),
-        title: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : const Color(0xFFD7E3F0),
-            fontSize: 12,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      child: Tooltip(
+        message: label,
+        child: ListTile(
+          key: ValueKey(
+            'admin-nav-${label.toLowerCase().replaceAll(' ', '-')}',
           ),
+          dense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: collapsed ? 20 : 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          leading: Icon(
+            icon,
+            color: selected ? Colors.white : const Color(0xFFB8CCE3),
+            size: 18,
+          ),
+          title: collapsed
+              ? null
+              : Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : const Color(0xFFD7E3F0),
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+          onTap: onTap,
         ),
-        onTap: onTap,
       ),
     ),
   );
@@ -1736,10 +1770,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       ? 'No data'
       : '${metrics[key]!.round()}';
 
-  Widget _brandTitle() {
-    final compact = MediaQuery.sizeOf(context).width < 620;
+  Widget _brandTitle({required bool extended}) {
     return Container(
-      constraints: BoxConstraints(maxWidth: compact ? 220 : 330),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.07),
@@ -1754,52 +1786,58 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           BoxShadow(color: Color(0x334A9BE8), offset: Offset(-1, -1)),
         ],
       ),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Row(
-          children: [
-            Icon(
-              Icons.balance_outlined,
-              size: compact ? 20 : 24,
-              color: const Color(0xFFFFCF66),
+      child: Row(
+        children: [
+          const ChiragAssociatesLogo(
+            compact: true,
+            onDark: true,
+            showTagline: false,
+          ),
+          if (extended) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 9),
+              child: SizedBox(
+                height: 28,
+                child: VerticalDivider(color: Color(0xFF6797C7)),
+              ),
             ),
-            SizedBox(width: compact ? 6 : 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'CHIRAG ASSOCIATES',
-                  style: TextStyle(
-                    fontSize: compact ? 15 : 18,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    shadows: const [
-                      Shadow(color: Color(0xFF001B3A), offset: Offset(1, 2)),
-                      Shadow(color: Color(0xFF72B4F0), offset: Offset(-1, -1)),
-                    ],
-                  ),
-                ),
-                if (!compact)
-                  const Text(
-                    'ADMINISTRATION & GOVERNANCE CONSOLE',
+            const Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'ADMINISTRATION CONSOLE',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 1),
+                  Text(
+                    'ADMINISTRATION & GOVERNANCE',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 9,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFFD9E9FA),
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _financialYearAction() {
+  Widget _financialYearAction({bool compact = false}) {
     final period = context.watch<AccountingPolicyService>().period;
-    final compact = MediaQuery.sizeOf(context).width < 620;
     final label =
         '${period.financialYearLabel} | ${period.assessmentYearLabel}';
     if (compact) {
@@ -2002,19 +2040,228 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     ],
   );
 
-  Widget _searchField() => TextField(
+  Widget _headerSearchField() => TextField(
+    key: const ValueKey('admin-global-search'),
     controller: _searchCtrl,
+    focusNode: _searchFocusNode,
+    textInputAction: TextInputAction.search,
     onChanged: (_) => setState(() {}),
+    onSubmitted: _submitSearch,
+    style: const TextStyle(color: Colors.white, fontSize: 12),
+    decoration: InputDecoration(
+      hintText: 'Search modules, clients, reports, permissions',
+      hintStyle: const TextStyle(color: Color(0xFFB8CCE3), fontSize: 11),
+      prefixIcon: const Icon(Icons.search, color: Color(0xFFD7E5F3), size: 18),
+      suffixIcon: _searchCtrl.text.trim().isEmpty
+          ? null
+          : IconButton(
+              tooltip: 'Clear search',
+              onPressed: _clearSearch,
+              icon: const Icon(Icons.close, color: Color(0xFFD7E5F3), size: 18),
+            ),
+      filled: true,
+      fillColor: const Color(0xFF164B84),
+      isDense: true,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(7),
+        borderSide: BorderSide.none,
+      ),
+    ),
+  );
+
+  Widget _searchWorkspace(
+    List<_AdminSection> filtered, {
+    required List<UserModel> matchingClients,
+    required bool desktop,
+  }) {
+    final query = _searchCtrl.text.trim();
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+      children: [
+        if (!desktop) ...[_searchField(), const SizedBox(height: 16)],
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                query.isEmpty ? 'Search' : 'Search Results',
+                style: const TextStyle(
+                  color: Color(0xFF17324D),
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Close search',
+              onPressed: _clearSearch,
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+        if (query.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          if (matchingClients.isNotEmpty) ...[
+            _clientSearchResults(matchingClients),
+            const SizedBox(height: 12),
+          ],
+          _searchHierarchy(filtered),
+        ],
+      ],
+    );
+  }
+
+  List<_AdminSection> _filteredSections(String query) {
+    final normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return _sections;
+    return _sections
+        .where((section) {
+          if (section.title.toLowerCase().contains(normalizedQuery)) {
+            return true;
+          }
+          return section.items.any(
+            (item) => item.toLowerCase().contains(normalizedQuery),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  List<UserModel> _filterClientDirectory(
+    Iterable<UserModel> users,
+    String query,
+  ) {
+    final normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return const <UserModel>[];
+    return users
+        .where(
+          (user) =>
+              user.role.isClient &&
+              (user.name.toLowerCase().contains(normalizedQuery) ||
+                  user.firmName.toLowerCase().contains(normalizedQuery) ||
+                  user.email.toLowerCase().contains(normalizedQuery) ||
+                  user.mobile.contains(normalizedQuery) ||
+                  user.id.toLowerCase().contains(normalizedQuery)),
+        )
+        .take(8)
+        .toList(growable: false);
+  }
+
+  Widget _clientSearchResults(List<UserModel> clients) => _AdminPanel(
+    title: 'Client Directory',
+    subtitle: '${clients.length} matching client(s) found',
+    child: Column(
+      children: [
+        for (final client in clients)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              backgroundColor: const Color(0xFFE7F1FF),
+              foregroundColor: const Color(0xFF0B4D93),
+              child: Icon(
+                client.isActive
+                    ? Icons.business_center_outlined
+                    : Icons.pending_outlined,
+              ),
+            ),
+            title: Text(
+              client.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            subtitle: Text(
+              client.firmName.isEmpty
+                  ? 'Client ID: ${client.id}'
+                  : '${client.firmName} | Client ID: ${client.id}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: const Icon(Icons.open_in_new, size: 16),
+            onTap: () => _openClientSearchResult(client),
+          ),
+      ],
+    ),
+  );
+
+  void _openMobileSearch() {
+    setState(() => _mobileSearchOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocusNode.requestFocus();
+    });
+  }
+
+  void _clearSearch() {
+    _searchFocusNode.unfocus();
+    setState(() {
+      _searchCtrl.clear();
+      _mobileSearchOpen = false;
+    });
+  }
+
+  void _submitSearch(String value) {
+    final query = value.trim().toLowerCase();
+    if (query.isEmpty) return;
+    final matchingClients = _filterClientDirectory(
+      context.read<AdminUserService>().users,
+      query,
+    );
+    if (matchingClients.isNotEmpty) {
+      _openClientSearchResult(matchingClients.first);
+      return;
+    }
+    final sections = _filteredSections(query);
+    if (sections.isEmpty) return;
+
+    final section = sections.first;
+    for (final feature in section.items) {
+      if (feature.toLowerCase().contains(query)) {
+        _openSearchResult(feature, sectionTitle: section.title);
+        return;
+      }
+    }
+
+    _searchFocusNode.unfocus();
+    setState(() {
+      _searchCtrl.clear();
+      _mobileSearchOpen = false;
+    });
+    _openAdminSection(section);
+  }
+
+  void _openSearchResult(String feature, {String? sectionTitle}) {
+    _searchFocusNode.unfocus();
+    setState(() {
+      _searchCtrl.clear();
+      _mobileSearchOpen = false;
+    });
+    _openAdminFeature(feature, sectionTitle: sectionTitle);
+  }
+
+  void _openClientSearchResult(UserModel client) {
+    _searchFocusNode.unfocus();
+    setState(() {
+      _searchCtrl.clear();
+      _mobileSearchOpen = false;
+      _activeWorkspace = AdminUserManagementScreen(initialQuery: client.id);
+      _activeWorkspaceTitle = 'Client List';
+      _selectedSectionTitle = null;
+    });
+    _closeAdminDrawer();
+  }
+
+  Widget _searchField() => TextField(
+    key: const ValueKey('admin-search-workspace'),
+    controller: _searchCtrl,
+    focusNode: _searchFocusNode,
+    textInputAction: TextInputAction.search,
+    onChanged: (_) => setState(() {}),
+    onSubmitted: _submitSearch,
     decoration: InputDecoration(
       prefixIcon: const Icon(Icons.search, color: Color(0xFF0B4D93)),
       suffixIcon: _searchCtrl.text.isEmpty
           ? null
           : IconButton(
               tooltip: 'Clear search',
-              onPressed: () {
-                _searchCtrl.clear();
-                setState(() {});
-              },
+              onPressed: _clearSearch,
               icon: const Icon(Icons.close),
             ),
       hintText: 'Search module, legal control, report or permission...',
@@ -2129,12 +2376,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   );
 
   Widget _searchHierarchy(List<_AdminSection> filtered) => _AdminPanel(
-    title: 'Menu Hierarchy Results',
-    subtitle: '${filtered.length} control domain(s) found',
+    title: 'Search Results',
+    subtitle: '${filtered.length} administration area(s) found',
     child: filtered.isEmpty
         ? const Padding(
             padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: Text('No matching module or control found.')),
+            child: Center(
+              child: Text(
+                'No matching administration module or control found.',
+              ),
+            ),
           )
         : Column(
             children: filtered
@@ -2163,7 +2414,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             leading: const Icon(Icons.arrow_right),
                             title: Text(item),
                             trailing: const Icon(Icons.open_in_new, size: 16),
-                            onTap: () => _openAdminFeature(
+                            onTap: () => _openSearchResult(
                               item,
                               sectionTitle: section.title,
                             ),

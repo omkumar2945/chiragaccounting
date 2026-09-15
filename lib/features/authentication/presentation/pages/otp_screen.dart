@@ -106,26 +106,29 @@ class _OtpScreenState extends State<OtpScreen> {
         _clearOtp();
       }
     } else {
+      final success = await auth.verifyPasswordResetOtp(_otpValue);
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ResetPasswordScreen(
-            emailOrMobile: widget.mobileNumber,
-            otp: _otpValue,
-          ),
-        ),
-      );
+      if (success) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const ResetPasswordScreen()),
+        );
+      } else {
+        _showSnack(auth.errorMessage ?? 'Invalid OTP');
+        _clearOtp();
+      }
     }
   }
 
   Future<void> _resendOtp() async {
     if (!_canResend) return;
     final auth = context.read<AuthController>();
-    final success = await auth.sendOTP(
-      widget.mobileNumber,
-      allowedRoles: widget.allowedRoles,
-    );
+    final success = widget.mode == OtpMode.passwordReset
+        ? await auth.forgotPassword(widget.mobileNumber)
+        : await auth.sendOTP(
+            widget.mobileNumber,
+            allowedRoles: widget.allowedRoles,
+          );
     if (!mounted) return;
     if (success) {
       _startResendTimer();
@@ -201,7 +204,7 @@ class _OtpScreenState extends State<OtpScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'OTP sent to +91 ${widget.mobileNumber}',
+                        'OTP sent to ${widget.mobileNumber}',
                         style: const TextStyle(
                           fontSize: 14,
                           color: Colors.grey,

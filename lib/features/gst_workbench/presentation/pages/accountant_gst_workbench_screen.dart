@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:chirag_accounting/features/admin/services/admin_user_service.dart';
@@ -6,7 +7,9 @@ import 'package:chirag_accounting/features/gst_workbench/services/bulk_gstr1_fil
 import 'package:chirag_accounting/features/gst_workbench/services/gst_compliance_service.dart';
 
 class AccountantGstWorkbenchScreen extends StatefulWidget {
-  const AccountantGstWorkbenchScreen({super.key});
+  const AccountantGstWorkbenchScreen({super.key, this.initialSection});
+
+  final String? initialSection;
 
   @override
   State<AccountantGstWorkbenchScreen> createState() =>
@@ -103,6 +106,107 @@ class _AccountantGstWorkbenchScreenState
   bool _isBulkFiling = false;
   bool _isRunningComplianceOperation = false;
   String? _complianceMessage;
+  bool _isFetchingItcPortal = false;
+  String? _itcPortalMessage;
+  int _itcFormRevision = 0;
+  final List<_ItcReconciliationLine> _itcLines = <_ItcReconciliationLine>[
+    _ItcReconciliationLine(
+      id: 'b2b-invoices',
+      category: 'Eligible ITC',
+      particulars: 'Inward supplies from registered suppliers (B2B)',
+      portalReference: 'GSTR-2B B2B',
+    ),
+    _ItcReconciliationLine(
+      id: 'b2b-amendments',
+      category: 'Eligible ITC',
+      particulars: 'B2B amendments and debit notes',
+      portalReference: 'GSTR-2B B2BA / CDN',
+    ),
+    _ItcReconciliationLine(
+      id: 'import-goods',
+      category: 'Eligible ITC',
+      particulars: 'Import of goods',
+      portalReference: 'GSTR-2B IMPG / ICEGATE',
+    ),
+    _ItcReconciliationLine(
+      id: 'import-services',
+      category: 'Eligible ITC',
+      particulars: 'Import of services',
+      portalReference: 'GSTR-2B IMPGSEZ / books',
+    ),
+    _ItcReconciliationLine(
+      id: 'sez-supplies',
+      category: 'Eligible ITC',
+      particulars: 'SEZ supplies',
+      portalReference: 'GSTR-2B SEZ',
+    ),
+    _ItcReconciliationLine(
+      id: 'isd-credit',
+      category: 'Eligible ITC',
+      particulars: 'Input Service Distributor credit',
+      portalReference: 'GSTR-2B ISD',
+    ),
+    _ItcReconciliationLine(
+      id: 'rcm-tax-paid',
+      category: 'Eligible ITC',
+      particulars: 'Reverse charge supplies after tax payment',
+      portalReference: 'GSTR-3B / books',
+    ),
+    _ItcReconciliationLine(
+      id: 'other-eligible-itc',
+      category: 'Eligible ITC',
+      particulars: 'Other eligible ITC',
+      portalReference: 'GSTR-2B / books',
+    ),
+    _ItcReconciliationLine(
+      id: 'credit-notes',
+      category: 'Reversal / ineligible',
+      particulars: 'Credit notes and supplier amendments',
+      portalReference: 'GSTR-2B CDN / CDNA',
+      isReduction: true,
+    ),
+    _ItcReconciliationLine(
+      id: 'section-17-5',
+      category: 'Reversal / ineligible',
+      particulars: 'Blocked credit under section 17(5)',
+      portalReference: 'Eligibility review',
+      isReduction: true,
+    ),
+    _ItcReconciliationLine(
+      id: 'rule-42',
+      category: 'Reversal / ineligible',
+      particulars: 'Rule 42 common credit reversal',
+      portalReference: 'GSTR-3B reversal',
+      isReduction: true,
+    ),
+    _ItcReconciliationLine(
+      id: 'rule-43',
+      category: 'Reversal / ineligible',
+      particulars: 'Rule 43 capital goods reversal',
+      portalReference: 'GSTR-3B reversal',
+      isReduction: true,
+    ),
+    _ItcReconciliationLine(
+      id: 'rule-37',
+      category: 'Reversal / ineligible',
+      particulars: 'Rule 37 supplier-payment reversal',
+      portalReference: 'GSTR-3B reversal',
+      isReduction: true,
+    ),
+    _ItcReconciliationLine(
+      id: 'other-reversal',
+      category: 'Reversal / ineligible',
+      particulars: 'Other ITC reversals through GSTR-3B',
+      portalReference: 'GSTR-3B reversal',
+      isReduction: true,
+    ),
+    _ItcReconciliationLine(
+      id: 'itc-reclaimed',
+      category: 'ITC reclaimed',
+      particulars: 'ITC reclaimed after payment or eligibility resolution',
+      portalReference: 'GSTR-3B reclaimed ITC',
+    ),
+  ];
 
   static const Map<String, _ComplianceModule>
   _complianceModules = <String, _ComplianceModule>{
@@ -202,6 +306,16 @@ class _AccountantGstWorkbenchScreenState
   };
 
   @override
+  void initState() {
+    super.initState();
+    final requestedSection = widget.initialSection;
+    if (requestedSection != null &&
+        _sections.any((section) => section.label == requestedSection)) {
+      _selectedSection = requestedSection;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ColoredBox(
       color: _canvas,
@@ -219,6 +333,8 @@ class _AccountantGstWorkbenchScreenState
                     Expanded(
                       child: _selectedSection == 'GST Dashboard'
                           ? _dashboard()
+                          : _selectedSection == 'ITC Reconciliation'
+                          ? _itcReconciliationWorkspace()
                           : _selectedSection == 'Bulk Push'
                           ? _bulkGstr1FilingWorkspace()
                           : _complianceModules.containsKey(_selectedSection)
@@ -783,6 +899,470 @@ class _AccountantGstWorkbenchScreenState
     );
   }
 
+  Future<void> _fetchItcPortalData() async {
+    setState(() {
+      _isFetchingItcPortal = true;
+      _itcPortalMessage = null;
+    });
+    try {
+      final result = await _gstComplianceService.execute(
+        operation: 'gstr2-2b',
+        gstin: _client.gstin,
+        returnPeriod: _period,
+        clientId: _client.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _itcPortalMessage = result.message.trim().isEmpty
+            ? 'GSTR-2B portal data is ready for reconciliation.'
+            : result.message;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _itcPortalMessage = 'GSTR-2B fetch failed: $error');
+    } finally {
+      if (mounted) setState(() => _isFetchingItcPortal = false);
+    }
+  }
+
+  void _clearItcWorksheet() {
+    setState(() {
+      for (final line in _itcLines) {
+        line.portal.clear();
+        line.books.clear();
+      }
+      _itcPortalMessage = null;
+      _itcFormRevision++;
+    });
+  }
+
+  void _setItcAmount(
+    _ItcReconciliationLine line,
+    _ItcSource source,
+    _ItcTaxHead head,
+    String value,
+  ) {
+    final parsed = double.tryParse(value.trim()) ?? 0;
+    setState(() => line.valuesFor(source).set(head, parsed < 0 ? 0 : parsed));
+  }
+
+  double _netItc(_ItcSource source) => _itcLines.fold(
+    0,
+    (total, line) =>
+        total +
+        (line.isReduction
+            ? -line.valuesFor(source).total
+            : line.valuesFor(source).total),
+  );
+
+  int get _itcReviewCount => _itcLines.where((line) {
+    if (!line.hasAmount) return false;
+    return (line.books.total - line.portal.total).abs() >= 0.01;
+  }).length;
+
+  String _formatItcAmount(double amount) {
+    final sign = amount < 0 ? '-' : '';
+    return sign + 'INR ${amount.abs().toStringAsFixed(2)}';
+  }
+
+  String _formatItcInput(double amount) =>
+      amount == 0 ? '' : amount.toStringAsFixed(2);
+
+  String _itcStatus(_ItcReconciliationLine line) {
+    if (!line.hasAmount) return 'Pending';
+    final difference = line.books.total - line.portal.total;
+    if (difference.abs() < 0.01) return 'Matched';
+    return difference > 0 ? 'Books higher' : 'Portal higher';
+  }
+
+  Color _itcStatusColor(_ItcReconciliationLine line) {
+    switch (_itcStatus(line)) {
+      case 'Matched':
+        return const Color(0xFF039855);
+      case 'Pending':
+        return const Color(0xFF667085);
+      default:
+        return const Color(0xFFD92D20);
+    }
+  }
+
+  Widget _itcReconciliationWorkspace() {
+    final portalNet = _netItc(_ItcSource.portal);
+    final booksNet = _netItc(_ItcSource.books);
+    final difference = booksNet - portalNet;
+
+    return ListView(
+      key: const ValueKey('gst-itc-reconciliation-workspace'),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 36),
+      children: [
+        const Text(
+          'GST ITC Reconciliation',
+          style: TextStyle(
+            color: _navy,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          '${_client.name} | ${_client.gstin} | $_period',
+          style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
+        ),
+        const SizedBox(height: 16),
+        _itcControls(),
+        const SizedBox(height: 12),
+        _itcSummary(
+          portalNet: portalNet,
+          booksNet: booksNet,
+          difference: difference,
+        ),
+        const SizedBox(height: 12),
+        _itcReconciliationTable(),
+      ],
+    );
+  }
+
+  Widget _itcControls() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      color: Colors.white,
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: 180,
+            child: TextFormField(
+              initialValue: _period,
+              decoration: _inputDecoration('Return Period'),
+              onChanged: (value) => setState(() => _period = value.trim()),
+            ),
+          ),
+          FilledButton.icon(
+            key: const ValueKey('gst-itc-fetch-gstr2b'),
+            onPressed: _isFetchingItcPortal ? null : _fetchItcPortalData,
+            icon: _isFetchingItcPortal
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_download_outlined),
+            label: Text(
+              _isFetchingItcPortal ? 'Fetching GSTR-2B...' : 'Fetch GSTR-2B',
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: _clearItcWorksheet,
+            icon: const Icon(Icons.restart_alt_outlined),
+            label: const Text('Clear Worksheet'),
+          ),
+          if (_itcPortalMessage != null)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Text(
+                _itcPortalMessage!,
+                style: const TextStyle(color: Color(0xFF475467), fontSize: 12),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _itcSummary({
+    required double portalNet,
+    required double booksNet,
+    required double difference,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 1100
+            ? 4
+            : constraints.maxWidth >= 620
+            ? 2
+            : 1;
+        const gap = 10.0;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            SizedBox(
+              width: width,
+              child: _itcSummaryMetric(
+                label: 'Portal Net ITC',
+                detail: 'GSTR-2B / GST Portal',
+                value: _formatItcAmount(portalNet),
+                color: const Color(0xFF155EEF),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: _itcSummaryMetric(
+                label: 'Books Net ITC',
+                detail: 'Purchase register / ledgers',
+                value: _formatItcAmount(booksNet),
+                color: const Color(0xFF0E9384),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: _itcSummaryMetric(
+                label: 'Difference',
+                detail: 'Books minus portal',
+                value: _formatItcAmount(difference),
+                color: difference.abs() < 0.01
+                    ? const Color(0xFF039855)
+                    : const Color(0xFFD92D20),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: _itcSummaryMetric(
+                label: 'Review Rows',
+                detail: 'Tax-head mismatch',
+                value: '$_itcReviewCount',
+                color: _itcReviewCount == 0
+                    ? const Color(0xFF039855)
+                    : const Color(0xFFF79009),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _itcSummaryMetric({
+    required String label,
+    required String detail,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      height: 96,
+      padding: const EdgeInsets.all(14),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(left: BorderSide(color: _border, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(color: _navy, fontWeight: FontWeight.w700),
+          ),
+          Text(
+            detail,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Color(0xFF667085), fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _itcReconciliationTable() {
+    return Container(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 14, 14, 8),
+            child: Text(
+              'GST PORTAL VS BOOKS - ITC TAX HEAD FORMAT',
+              style: TextStyle(
+                color: _navy,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: Text(
+              'Portal values: GSTR-2B / GSTR-3B. Books values: purchase register and ITC ledgers.',
+              style: TextStyle(color: Color(0xFF667085), fontSize: 11),
+            ),
+          ),
+          const Divider(height: 1),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columnSpacing: 10,
+              horizontalMargin: 14,
+              headingRowHeight: 52,
+              dataRowMinHeight: 66,
+              dataRowMaxHeight: 66,
+              columns: [
+                DataColumn(label: _itcHeader('Category', width: 142)),
+                DataColumn(label: _itcHeader('ITC Particulars', width: 260)),
+                DataColumn(label: _itcHeader('Portal IGST', width: 96)),
+                DataColumn(label: _itcHeader('Portal CGST', width: 96)),
+                DataColumn(label: _itcHeader('Portal SGST', width: 96)),
+                DataColumn(label: _itcHeader('Portal Cess', width: 96)),
+                DataColumn(label: _itcHeader('Books IGST', width: 96)),
+                DataColumn(label: _itcHeader('Books CGST', width: 96)),
+                DataColumn(label: _itcHeader('Books SGST', width: 96)),
+                DataColumn(label: _itcHeader('Books Cess', width: 96)),
+                DataColumn(label: _itcHeader('Difference', width: 112)),
+                DataColumn(label: _itcHeader('Status', width: 106)),
+              ],
+              rows: [for (final line in _itcLines) _itcDataRow(line)],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _itcHeader(String text, {required double width}) {
+    return SizedBox(
+      width: width,
+      child: Text(
+        text,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+
+  DataRow _itcDataRow(_ItcReconciliationLine line) {
+    final difference = line.books.total - line.portal.total;
+    final status = _itcStatus(line);
+    return DataRow(
+      cells: [
+        DataCell(
+          SizedBox(
+            width: 142,
+            child: Text(
+              line.category,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF475467)),
+            ),
+          ),
+        ),
+        DataCell(
+          SizedBox(
+            width: 260,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  line.particulars,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  line.portalReference,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF667085),
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        DataCell(_itcAmountField(line, _ItcSource.portal, _ItcTaxHead.igst)),
+        DataCell(_itcAmountField(line, _ItcSource.portal, _ItcTaxHead.cgst)),
+        DataCell(_itcAmountField(line, _ItcSource.portal, _ItcTaxHead.sgst)),
+        DataCell(_itcAmountField(line, _ItcSource.portal, _ItcTaxHead.cess)),
+        DataCell(_itcAmountField(line, _ItcSource.books, _ItcTaxHead.igst)),
+        DataCell(_itcAmountField(line, _ItcSource.books, _ItcTaxHead.cgst)),
+        DataCell(_itcAmountField(line, _ItcSource.books, _ItcTaxHead.sgst)),
+        DataCell(_itcAmountField(line, _ItcSource.books, _ItcTaxHead.cess)),
+        DataCell(
+          SizedBox(
+            width: 112,
+            child: Text(
+              _formatItcAmount(difference),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: difference.abs() < 0.01
+                    ? const Color(0xFF039855)
+                    : const Color(0xFFD92D20),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+        DataCell(
+          SizedBox(
+            width: 106,
+            child: Text(
+              status,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: _itcStatusColor(line),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _itcAmountField(
+    _ItcReconciliationLine line,
+    _ItcSource source,
+    _ItcTaxHead head,
+  ) {
+    final value = line.valuesFor(source).valueFor(head);
+    return SizedBox(
+      width: 96,
+      child: TextFormField(
+        key: ValueKey(
+          'itc-$_itcFormRevision-${line.id}-${source.name}-${head.name}',
+        ),
+        initialValue: _formatItcInput(value),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'^\d{0,12}(\.\d{0,2})?$')),
+        ],
+        textAlign: TextAlign.right,
+        style: const TextStyle(fontSize: 12),
+        decoration: const InputDecoration(
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+          border: OutlineInputBorder(),
+        ),
+        onChanged: (next) => _setItcAmount(line, source, head, next),
+      ),
+    );
+  }
+
   List<_BulkFilingClient> _bulkFilingClients(BuildContext context) {
     final adminUsers = context.watch<AdminUserService>();
     return adminUsers.users
@@ -1090,6 +1670,73 @@ class _BulkFilingClient {
   final String id;
   final String name;
   final String gstin;
+}
+
+enum _ItcSource { portal, books }
+
+enum _ItcTaxHead { igst, cgst, sgst, cess }
+
+class _ItcTaxAmounts {
+  double igst = 0;
+  double cgst = 0;
+  double sgst = 0;
+  double cess = 0;
+
+  double get total => igst + cgst + sgst + cess;
+
+  double valueFor(_ItcTaxHead head) {
+    return switch (head) {
+      _ItcTaxHead.igst => igst,
+      _ItcTaxHead.cgst => cgst,
+      _ItcTaxHead.sgst => sgst,
+      _ItcTaxHead.cess => cess,
+    };
+  }
+
+  void set(_ItcTaxHead head, double value) {
+    switch (head) {
+      case _ItcTaxHead.igst:
+        igst = value;
+      case _ItcTaxHead.cgst:
+        cgst = value;
+      case _ItcTaxHead.sgst:
+        sgst = value;
+      case _ItcTaxHead.cess:
+        cess = value;
+    }
+  }
+
+  void clear() {
+    igst = 0;
+    cgst = 0;
+    sgst = 0;
+    cess = 0;
+  }
+}
+
+class _ItcReconciliationLine {
+  _ItcReconciliationLine({
+    required this.id,
+    required this.category,
+    required this.particulars,
+    required this.portalReference,
+    this.isReduction = false,
+  });
+
+  final String id;
+  final String category;
+  final String particulars;
+  final String portalReference;
+  final bool isReduction;
+  final _ItcTaxAmounts portal = _ItcTaxAmounts();
+  final _ItcTaxAmounts books = _ItcTaxAmounts();
+
+  bool get hasAmount => portal.total > 0 || books.total > 0;
+
+  _ItcTaxAmounts valuesFor(_ItcSource source) => switch (source) {
+    _ItcSource.portal => portal,
+    _ItcSource.books => books,
+  };
 }
 
 class _EmptyBulkFilingState extends StatelessWidget {

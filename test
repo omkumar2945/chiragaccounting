@@ -1,10 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chirag_accounting/features/ai_workbench/services/ocr_module_api_service.dart';
 import 'package:chirag_accounting/features/ai_workbench/services/workbench_queue_service.dart';
+import 'package:chirag_accounting/features/admin/services/admin_user_service.dart';
 import 'package:chirag_accounting/features/client_portal/models/client_portal_module.dart';
 import 'package:chirag_accounting/features/client_portal/services/client_portal_access_service.dart';
+import 'package:chirag_accounting/features/clients/services/authoritative_client_data_api.dart';
 import 'package:chirag_accounting/features/clients/services/document_hub_service.dart';
 import 'package:chirag_accounting/features/services/invoice_ocr_service.dart';
 import 'package:chirag_accounting/features/services/purchase_service.dart';
@@ -144,4 +147,224 @@ void main() {
       isFalse,
     );
   });
+
+  test('portal access writes use the latest server revision and replace cache',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = _respondingDio((options) {
+      requests.add(options);
+      if (options.method == 'GET') {
+        return _response(options, _aggregate(loginEnabled: true, version: 7));
+      }
+      if (options.method == 'PATCH' && options.path == '/clients/42/access') {
+        return _response(
+          options,
+          _aggregate(loginEnabled: false, version: 8),
+        );
+      }
+      throw StateError('Unexpected ${options.method} ${options.path}');
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final access = ClientPortalAccessService(
+      preferences: preferences,
+      clientDataApi: AuthoritativeClientDataApi(dio: dio),
+      useRemoteApi: true,
+    );
+    await access.load();
+
+    await access.updateLoginAccess('42', loginEnabled: false);
+
+    final patch = requests.singleWhere(
+      (request) => request.method == 'PATCH',
+    );
+    expect((patch.data as Map<String, dynamic>)['ifMatchVersion'], 7);
+    expect(access.profileFor('42').loginEnabled, isFalse);
+  });
+
+  test('a failed remote portal write leaves the cached policy unchanged',
+      () async {
+    final dio = Dio();
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.method == 'GET') {
+            handler.resolve(
+              _response(options, _aggregate(loginEnabled: true, version: 3)),
+            );
+            return;
+          }
+          handler.reject(
+            DioException(
+              requestOptions: options,
+              response: _response(options, <String, dynamic>{}, statusCode: 503),
+              type: DioExceptionType.badResponse,
+            ),
+          );
+        },
+      ),
+    );
+    final preferences = await SharedPreferences.getInstance();
+    final access = ClientPortalAccessService(
+      preferences: preferences,
+      clientDataApi: AuthoritativeClientDataApi(dio: dio),
+      useRemoteApi: true,
+    );
+    await access.load();
+
+    await expectLater(
+      access.updateLoginAccess('42', loginEnabled: false),
+      throwsA(isA<Object>()),
+    );
+
+    expect(access.profileFor('42').loginEnabled, isTrue);
+  });
+
+  test('credential provisioning keeps its temporary password out of cache data',
+      () async {
+    final dio = _respondingDio((options) {
+      expect(options.method, 'POST');
+      expect(options.path, '/clients/42/credentials');
+      expect(options.data, <String, dynamic>{'action': 'onboard'});
+      return _response(
+        options,
+        <String, dynamic>{
+          ..._aggregate(loginEnabled: true, version: 4),
+          'temporaryPassword': 'Te5t@Pass',
+        },
+        statusCode: 201,
+      );
+    });
+
+    final result = await AuthoritativeClientDataApi(
+      dio: dio,
+    ).provisionCredentials('42', onboarding: true);
+
+    expect(result.temporaryPassword, 'Te5t@Pass');
+    expect(result.aggregate.containsKey('temporaryPassword'), isFalse);
+  });
+
+  test('malformed remote client data preserves the prior cached directory',
+      () async {
+    var requestCount = 0;
+    final dio = _respondingDio((options) {
+      if (options.path == '/admin/staff') {
+        return _response(options, <String, dynamic>{'staff': <dynamic>[]});
+      }
+      if (options.path != '/clients') {
+        throw StateError('Unexpected ${options.method} ${options.path}');
+      }
+      requestCount++;
+      return _response(
+        options,
+        <String, dynamic>{
+          'clients': <Map<String, dynamic>>[
+            requestCount == 1
+                ? _directoryAggregate(name: 'Server Client')
+                : <String, dynamic>{
+                    'client': <String, dynamic>{'id': '42'},
+                  },
+          ],
+        },
+      );
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final directory = AdminUserService(
+      preferences: preferences,
+      dio: dio,
+      clientDataApi: AuthoritativeClientDataApi(dio: dio),
+      useRemoteApi: true,
+    );
+
+    await directory.load();
+    await directory.load();
+
+    expect(directory.users.where((user) => user.id == '42').single.name,
+        'Server Client');
+  });
+}
+
+Dio _respondingDio(
+  Response<Map<String, dynamic>> Function(RequestOptions options) responseFor,
+) {
+  final dio = Dio();
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) {
+        try {
+          handler.resolve(responseFor(options));
+        } catch (error, stackTrace) {
+          handler.reject(
+            DioException(
+              requestOptions: options,
+              error: error,
+              stackTrace: stackTrace,
+            ),
+          );
+        }
+      },
+    ),
+  );
+  return dio;
+}
+
+Response<Map<String, dynamic>> _response(
+  RequestOptions options,
+  Map<String, dynamic> data, {
+  int statusCode = 200,
+}) {
+  return Response<Map<String, dynamic>>(
+    requestOptions: options,
+    data: <String, dynamic>{'data': data},
+    statusCode: statusCode,
+  );
+}
+
+Map<String, dynamic> _aggregate({
+  required bool loginEnabled,
+  required int version,
+}) {
+  return <String, dynamic>{
+    'client': <String, dynamic>{'id': '42'},
+    'access': <String, dynamic>{
+      'loginEnabled': loginEnabled,
+      'mobileLoginEnabled': true,
+      'webLoginEnabled': true,
+      'twoFactorRequired': false,
+      'accountLocked': false,
+      'subscriptionPlan': 'standard',
+      'billingMode': 'fullBillingSoftware',
+      'accountingMode': 'accountsOnly',
+      'purchaseEntryMode': 'both',
+      'salesEntryMode': 'both',
+      'modules': <String, dynamic>{},
+      'dashboardWidgets': <String, bool>{},
+      'documentHubAccess': <String, dynamic>{},
+      'version': version,
+    },
+  };
+}
+
+Map<String, dynamic> _directoryAggregate({required String name}) {
+  return <String, dynamic>{
+    'client': <String, dynamic>{
+      'id': '42',
+      'name': name,
+      'email': 'client@example.com',
+      'mobile': '9876543210',
+      'firmName': 'Client Firm',
+      'role': 'client',
+      'accountOrigin': 'imported',
+      'clientStatus': 'active',
+      'loginStatus': 'active',
+      'isActive': true,
+      'mustChangePassword': false,
+      'createdAt': '2026-01-01T00:00:00.000Z',
+      'lastLoginAt': null,
+    },
+    'profile': <String, dynamic>{},
+    'compliance': <String, dynamic>{},
+    'assignment': <String, dynamic>{},
+    'access': <String, dynamic>{},
+    'workspace': <String, dynamic>{},
+  };
 }

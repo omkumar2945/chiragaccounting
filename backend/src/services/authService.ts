@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import jwt from 'jsonwebtoken';
 
 import { env } from '../config/env.js';
+import { isValidPassword, passwordPolicyMessage } from '../security/passwordPolicy.js';
 import { UserRole } from '../types/securityContext.js';
 
 const scrypt = promisify(crypto.scrypt);
@@ -98,6 +99,7 @@ export class AuthService {
   }
 
   async resetPassword(identifier: string, password: string) {
+    if (!isValidPassword(password)) throw new AuthenticationError(passwordPolicyMessage);
     const user = await this.repository.findUserByIdentifier(normalizeIdentifier(identifier));
     if (!user || !user.isActive) throw new AuthenticationError('No active account found for this email.');
     await this.repository.updatePassword(user.id, await hashPassword(password));

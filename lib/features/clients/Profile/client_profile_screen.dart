@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 import 'package:chirag_accounting/core/location/standard_address.dart';
+import 'package:chirag_accounting/core/constants/api_constants.dart';
 import 'package:chirag_accounting/core/utils/file_picker_utils.dart';
 import 'package:chirag_accounting/core/utils/mobile_number_utils.dart';
 import 'package:chirag_accounting/features/authentication/controllers/auth_controller.dart';
@@ -86,7 +87,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       return;
     }
 
-    final stored = await _profileService.load(user.id);
+    final stored = await _profileService.load(
+      user.id,
+      useAuthoritativeClientApi: user.role.isClient,
+    );
     if (!mounted) return;
 
     _nameCtrl.text = stored?.name.isNotEmpty == true ? stored!.name : user.name;
@@ -122,7 +126,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     _caMembershipCertificatePath = stored?.caMembershipCertificatePath ?? '';
     _copCertificatePath = stored?.copCertificatePath ?? '';
     _firmRegistrationCertificatePath =
-      stored?.firmRegistrationCertificatePath ?? '';
+        stored?.firmRegistrationCertificatePath ?? '';
     _authorityLetterPath = stored?.authorityLetterPath ?? '';
 
     setState(() => _isLoading = false);
@@ -271,17 +275,15 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     _cropSlider(
                       'Horizontal position',
                       left,
-                      (value) => setDialog(
-                        () => left = value.clamp(0, 1 - width),
-                      ),
+                      (value) =>
+                          setDialog(() => left = value.clamp(0, 1 - width)),
                       max: 1 - width,
                     ),
                     _cropSlider(
                       'Vertical position',
                       top,
-                      (value) => setDialog(
-                        () => top = value.clamp(0, 1 - height),
-                      ),
+                      (value) =>
+                          setDialog(() => top = value.clamp(0, 1 - height)),
                       max: 1 - height,
                     ),
                   ],
@@ -430,9 +432,9 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       pan: _panCtrl.text,
     );
     if (!addressValidation.isValid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(addressValidation.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(addressValidation.message)));
       return;
     }
 
@@ -497,7 +499,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         firmRegistrationCertificatePath: _firmRegistrationCertificatePath,
         authorityLetterPath: _authorityLetterPath,
       );
-      await _profileService.save(payload);
+      await _profileService.save(
+        payload,
+        useAuthoritativeClientApi: user.role.isClient,
+      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -605,13 +610,15 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     final user = context.watch<AuthController>().currentUser;
     final showPracticeDocs = user != null && !user.role.isClient;
     final isPracticeUser = showPracticeDocs;
+    final isAuthoritativeClient =
+        user?.role.isClient == true && !ApiConstants.useMockApi;
     final profileTitle = isPracticeUser
-      ? 'ICAI CA / Auditor Profile'
+        ? 'ICAI CA / Auditor Profile'
         : 'Client Profile Update';
     final logoTitle = isPracticeUser ? 'Profile Photo' : 'Client Logo';
     final identityTitle = isPracticeUser
-      ? 'ICAI Professional Identity'
-      : 'Brand Identity';
+        ? 'ICAI Professional Identity'
+        : 'Brand Identity';
 
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -700,6 +707,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
               TextFormField(
                 controller: _emailCtrl,
                 decoration: const InputDecoration(labelText: 'Email'),
+                readOnly: isAuthoritativeClient,
                 validator: _required,
               ),
               const SizedBox(height: 10),
@@ -708,6 +716,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 decoration: const InputDecoration(labelText: 'Mobile'),
                 keyboardType: TextInputType.phone,
                 inputFormatters: indianMobileInputFormatters(),
+                readOnly: isAuthoritativeClient,
                 validator: _validateMobile,
               ),
               const SizedBox(height: 10),

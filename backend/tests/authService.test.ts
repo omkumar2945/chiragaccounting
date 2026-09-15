@@ -6,6 +6,10 @@ import type {
 } from '../src/services/authService.js';
 
 process.env.JWT_SECRET = 'unit-test-secret-unit-test-secret';
+process.env.DB_HOST = 'localhost';
+process.env.DB_USER = 'unit-test';
+process.env.DB_PASSWORD = 'unit-test';
+process.env.DB_NAME = 'unit-test';
 process.env.MSSQL_SERVER = 'localhost';
 process.env.MSSQL_DATABASE = 'unit-test';
 process.env.MSSQL_USER = 'unit-test';

@@ -7,6 +7,7 @@ import 'package:chirag_accounting/shared/widgets/movable_resizable_dialog.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:chirag_accounting/core/constants/import_template_content.dart';
+import 'package:chirag_accounting/core/utils/file_download.dart';
 import 'package:chirag_accounting/core/utils/mobile_number_utils.dart';
 import 'package:chirag_accounting/features/services/gst_portal_lookup_service.dart';
 import 'package:chirag_accounting/features/services/pincode_lookup_service.dart';
@@ -26,11 +27,13 @@ class AdminUserManagementScreen extends StatefulWidget {
     super.key,
     this.initialAction = AdminClientManagementAction.clientList,
     this.initialActiveFilter,
+    this.initialQuery = '',
     this.embedded = false,
   });
 
   final AdminClientManagementAction initialAction;
   final bool? initialActiveFilter;
+  final String initialQuery;
   final bool embedded;
 
   @override
@@ -40,6 +43,7 @@ class AdminUserManagementScreen extends StatefulWidget {
 
 class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
   String _query = '';
+  final TextEditingController _queryController = TextEditingController();
   bool? _activeFilter;
   bool _importing = false;
   bool _initialActionHandled = false;
@@ -55,9 +59,17 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
   void initState() {
     super.initState();
     _activeFilter = widget.initialActiveFilter;
+    _query = widget.initialQuery.trim();
+    _queryController.text = _query;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) context.read<AdminUserService>().load();
     });
+  }
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    super.dispose();
   }
 
   @override
@@ -193,6 +205,40 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
       children: [
+        if (service.directoryLoadError != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF7E8),
+              border: Border.all(color: const Color(0xFFF2C66D)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.sync_problem_outlined,
+                  color: Color(0xFF8A5A00),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    service.directoryLoadError!,
+                    style: const TextStyle(
+                      color: Color(0xFF5E430F),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => service.load(),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
         Wrap(
           spacing: 10,
           runSpacing: 10,
@@ -221,6 +267,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
               SizedBox(
                 width: 340,
                 child: TextField(
+                  controller: _queryController,
                   decoration: const InputDecoration(
                     labelText: 'Search client ID, firm, contact, or mobile',
                     prefixIcon: Icon(Icons.search),
@@ -844,12 +891,52 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
       );
       if (!mounted) return;
       setState(_selectedUserIds.clear);
+      await _showOnboardingCredentials(generated);
+      if (!mounted) return;
       _snack(
         '${generated.length} client(s) onboarded. Use Send Login to deliver credentials.',
       );
     } on FormatException catch (error) {
       if (mounted) _snack(error.message, error: true);
     }
+  }
+
+  Future<void> _showOnboardingCredentials(
+    Map<String, GeneratedCredentials> credentials,
+  ) async {
+    if (credentials.isEmpty) return;
+    final credentialText = credentials.values
+        .map(
+          (credential) =>
+              'Client ID: ${credential.userId}\nTemporary password: ${credential.temporaryPassword}',
+        )
+        .join('\n\n');
+    await showMovableDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Client Login Credentials'),
+        content: SizedBox(
+          width: 440,
+          child: SingleChildScrollView(
+            child: SelectableText(credentialText),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: credentialText));
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+            },
+            icon: const Icon(Icons.copy_outlined),
+            label: const Text('Copy Credentials'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _bulkSetActive(bool active) async {
@@ -2028,14 +2115,12 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
   Future<void> _downloadClientImportTemplate() async {
     const fileName = 'chirag_associates_client_user_import_template.csv';
     try {
-      await FilePicker.saveFile(
-        dialogTitle: 'Save Client Onboarding Template',
+      await downloadFile(
         fileName: fileName,
         bytes: Uint8List.fromList(
           utf8.encode(ImportTemplateContent.clientUsersCsv),
         ),
-        type: FileType.custom,
-        allowedExtensions: const <String>['csv'],
+        mimeType: 'text/csv;charset=utf-8',
       );
       if (mounted) _snack('Template downloaded: $fileName');
     } catch (error) {

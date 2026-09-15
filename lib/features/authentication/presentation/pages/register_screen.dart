@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:chirag_accounting/core/location/indian_location_options.dart';
 import 'package:chirag_accounting/core/utils/mobile_number_utils.dart';
+import 'package:chirag_accounting/core/utils/password_policy.dart';
+import 'package:chirag_accounting/shared/widgets/searchable_dropdown_form_field.dart';
 import 'package:chirag_accounting/features/admin/services/admin_user_service.dart';
 import 'package:chirag_accounting/features/authentication/controllers/auth_controller.dart';
 import 'package:chirag_accounting/features/authentication/presentation/pages/post_login_destination.dart';
@@ -34,6 +37,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _acceptedTerms = false;
   bool _isLoading = false;
   UserRole _selectedRole = UserRole.client;
+  String? _selectedState;
+  String? _selectedCity;
 
   StaffLoginMode get _loginMode => switch (_selectedRole) {
     UserRole.accountant => StaffLoginMode.accountant,
@@ -325,38 +330,56 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             },
                           ),
                           const SizedBox(height: 14),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildField(
-                                  controller: _stateCtrl,
-                                  label: 'State',
-                                  icon: Icons.map_outlined,
-                                  validator: (value) =>
-                                      value?.trim().isEmpty == true
-                                      ? 'Required'
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildField(
-                                  controller: _cityCtrl,
-                                  label: 'City',
-                                  icon: Icons.location_city_outlined,
-                                  validator: (value) =>
-                                      value?.trim().isEmpty == true
-                                      ? 'Required'
-                                      : null,
-                                ),
-                              ),
-                            ],
+                          SearchableDropdownFormField<String>(
+                            value: _selectedState,
+                            items: indianStateOptions,
+                            itemLabelBuilder: (state) => state,
+                            dialogTitle: 'Select State',
+                            hintText: 'Select State',
+                            decoration: const InputDecoration(
+                              labelText: 'State',
+                              prefixIcon: Icon(Icons.map_outlined),
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) =>
+                                value == null ? 'Select a state' : null,
+                            onChanged: (state) => setState(() {
+                              _selectedState = state;
+                              _selectedCity = null;
+                              _stateCtrl.text = state ?? '';
+                              _cityCtrl.clear();
+                            }),
+                          ),
+                          const SizedBox(height: 14),
+                          SearchableDropdownFormField<String>(
+                            value: _selectedCity,
+                            items: indianCitiesByState[_selectedState] ??
+                                const <String>[],
+                            itemLabelBuilder: (city) => city,
+                            dialogTitle: 'Select City',
+                            hintText: _selectedState == null
+                                ? 'Select State First'
+                                : 'Select City',
+                            decoration: const InputDecoration(
+                              labelText: 'City',
+                              prefixIcon: Icon(Icons.location_city_outlined),
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) =>
+                                value == null ? 'Select a city' : null,
+                            onChanged: _selectedState == null
+                                ? null
+                                : (city) => setState(() {
+                                      _selectedCity = city;
+                                      _cityCtrl.text = city ?? '';
+                                    }),
                           ),
                         ],
                         const SizedBox(height: 14),
                         TextFormField(
                           controller: _passwordCtrl,
                           obscureText: _obscurePassword,
+                          onChanged: (_) => setState(() {}),
                           decoration: InputDecoration(
                             labelText: 'Password',
                             prefixIcon: const Icon(Icons.lock_outline),
@@ -379,17 +402,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               vertical: 14,
                             ),
                           ),
-                          validator: (v) {
-                            if (v == null || v.length < 8) {
-                              return 'Minimum 8 characters';
-                            }
-                            if (!RegExp(r'[A-Za-z]').hasMatch(v) ||
-                                !RegExp(r'[0-9]').hasMatch(v)) {
-                              return 'Include at least one letter and number';
-                            }
-                            return null;
-                          },
+                          validator: validatePassword,
                         ),
+                        const SizedBox(height: 8),
+                        PasswordStrengthGuide(password: _passwordCtrl.text),
                         const SizedBox(height: 14),
                         TextFormField(
                           controller: _confirmCtrl,

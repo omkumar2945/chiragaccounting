@@ -190,6 +190,8 @@ class _MovableResizableDialogState extends State<MovableResizableDialog> {
                               : MainAxisSize.max,
                           children: [
                             _DialogTitleBar(
+                              title: _dialogTitle(widget.child),
+                              onClose: () => Navigator.of(context).maybePop(),
                               onPanUpdate: (details) {
                                 setState(() {
                                   _offset = _boundedOffset(
@@ -214,10 +216,7 @@ class _MovableResizableDialogState extends State<MovableResizableDialog> {
                                     shape: RoundedRectangleBorder(),
                                   ),
                                 ),
-                                child: SingleChildScrollView(
-                                  padding: const EdgeInsets.only(bottom: 18),
-                                  child: widget.child,
-                                ),
+                                child: _DialogContent(child: widget.child),
                               ),
                             ),
                           ],
@@ -296,49 +295,111 @@ class _MovableResizableDialogState extends State<MovableResizableDialog> {
   }
 }
 
-class _DialogTitleBar extends StatelessWidget {
-  const _DialogTitleBar({required this.onPanUpdate});
+String _dialogTitle(Widget child) {
+  if (child is AlertDialog && child.title is Text) {
+    return (child.title as Text).data ?? 'Dialog';
+  }
+  return 'Dialog';
+}
 
+class _DialogContent extends StatelessWidget {
+  const _DialogContent({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (child is! AlertDialog) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: child,
+      );
+    }
+
+    final dialog = child as AlertDialog;
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
+            child: dialog.content ?? const SizedBox.shrink(),
+          ),
+        ),
+        if (dialog.actions != null && dialog.actions!.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFD),
+              border: Border(
+                top: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+            ),
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 10,
+              runSpacing: 8,
+              children: dialog.actions!,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _DialogTitleBar extends StatelessWidget {
+  const _DialogTitleBar({
+    required this.title,
+    required this.onClose,
+    required this.onPanUpdate,
+  });
+
+  final String title;
+  final VoidCallback onClose;
   final GestureDragUpdateCallback onPanUpdate;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: 'Move dialog',
-      child: MouseRegion(
-        cursor: SystemMouseCursors.move,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onPanUpdate: onPanUpdate,
-          child: Container(
-            height: _MovableResizableDialogState._titleBarHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer,
-              border: Border(
-                bottom: BorderSide(
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.7),
-                ),
-              ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.move,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: onPanUpdate,
+        child: Container(
+          height: _MovableResizableDialogState._titleBarHeight,
+          padding: const EdgeInsets.only(left: 16, right: 6),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            border: Border(
+              bottom: BorderSide(color: colorScheme.outlineVariant),
             ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.drag_indicator,
-                  size: 19,
-                  color: colorScheme.onPrimaryContainer,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Move window',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w600,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: const Color(0xFF032D60),
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ],
-            ),
+              ),
+              Tooltip(
+                message: 'Close dialog',
+                child: IconButton(
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close),
+                  color: const Color(0xFF475569),
+                  iconSize: 20,
+                ),
+              ),
+            ],
           ),
         ),
       ),

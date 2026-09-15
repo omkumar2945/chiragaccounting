@@ -16,7 +16,7 @@ class ApiConstants {
   /// Set at runtime with --dart-define=API_BASE_URL=https://your-host/v1.
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://api.chiragca.com/v1',
+    defaultValue: 'https://chiragaccounting.com/v1',
   );
 
   // Connection & receive timeouts (milliseconds)
@@ -31,13 +31,31 @@ class ApiConstants {
   static const String refreshToken = '/auth/refresh-token';
   static const String forgotPassword = '/auth/forgot-password';
   static const String resetPassword = '/auth/reset-password';
+  static const String firebasePasswordChange = '/auth/firebase-password-change';
   static const String logout = '/auth/logout';
   static const String register = '/auth/register';
 
   // ── User endpoints ─────────────────────────────────────────────
   static const String me = '/users/me';
   static const String updateProfile = '/users/me';
+  static const String clients = '/clients';
   static const String adminClients = '/admin/clients';
+  static const String adminStaff = '/admin/staff';
+  static const String adminClientImport = '/admin/clients/import';
+  static String clientAuthoritative(String clientId) =>
+      '/clients/$clientId/authoritative';
+  static String clientIdentity(String clientId) =>
+      '/clients/$clientId/identity';
+  static String clientProfile(String clientId) => '/clients/$clientId/profile';
+  static String clientCompliance(String clientId) =>
+      '/clients/$clientId/compliance';
+  static String clientAssignments(String clientId) =>
+      '/clients/$clientId/assignments';
+  static String clientAccess(String clientId) => '/clients/$clientId/access';
+  static String clientCredentials(String clientId) =>
+      '/clients/$clientId/credentials';
+  static String clientWorkspace(String clientId) =>
+      '/clients/$clientId/workspace';
 
   // ── GST module endpoints ───────────────────────────────────────
   static const String gstGstr1 = '/gst/gstr1';

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:chirag_accounting/core/utils/file_download.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -751,13 +752,13 @@ class _QuickProvisionalReportScreenState
             .toList(growable: false),
       };
 
-      await FilePicker.saveFile(
-        dialogTitle: 'Save projection JSON',
+      await downloadFile(
         fileName:
             'quick_provisional_projection_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.json',
         bytes: Uint8List.fromList(
           utf8.encode(const JsonEncoder.withIndent('  ').convert(payload)),
         ),
+        mimeType: 'application/json',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

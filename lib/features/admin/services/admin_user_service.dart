@@ -18,6 +18,7 @@ import 'package:chirag_accounting/features/client_portal/services/client_portal_
 import 'package:chirag_accounting/features/admin/models/admin_audit_event.dart';
 import 'package:chirag_accounting/features/authentication/models/user_model.dart';
 import 'package:chirag_accounting/features/clients/Referral/client_referral_service.dart';
+import 'package:chirag_accounting/features/clients/services/authoritative_client_data_api.dart';
 import 'package:chirag_accounting/features/roles/models/role_model.dart';
 
 enum CredentialChannel { email, sms, whatsapp }
@@ -358,6 +359,7 @@ class AdminUserService extends ChangeNotifier {
     SharedPreferences? preferences,
     Random? random,
     Dio? dio,
+    AuthoritativeClientDataApi? clientDataApi,
     bool? useRemoteApi,
   }) : _integrationHub = integrationHub,
        _clientPortalAccess = clientPortalAccess,
@@ -365,6 +367,9 @@ class AdminUserService extends ChangeNotifier {
        _preferences = preferences,
        _random = random ?? Random.secure(),
        _dio = dio ?? ApiClient.dio,
+       _clientDataApi =
+           clientDataApi ??
+           AuthoritativeClientDataApi(dio: dio ?? ApiClient.dio),
        _useRemoteApi = useRemoteApi ?? !ApiConstants.useMockApi {
     if (_integrationHub != null) {
       _startAutoSyncTicker();
@@ -386,6 +391,7 @@ class AdminUserService extends ChangeNotifier {
   final SharedPreferences? _preferences;
   final Random _random;
   final Dio _dio;
+  final AuthoritativeClientDataApi _clientDataApi;
   final bool _useRemoteApi;
   final List<UserModel> _users = <UserModel>[];
   final Map<String, String> _temporaryPasswords = <String, String>{};
@@ -406,10 +412,12 @@ class AdminUserService extends ChangeNotifier {
   bool _autoSyncSweepRunning = false;
   Timer? _autoSyncTimer;
   AdminClientImportIssues? _importIssues;
+  String? _directoryLoadError;
 
   bool get isLoaded => _isLoaded;
   List<UserModel> get users => List<UserModel>.unmodifiable(_users);
   AdminClientImportIssues? get importIssues => _importIssues;
+  String? get directoryLoadError => _directoryLoadError;
 
   bool containsUser(String userId) => _users.any((user) => user.id == userId);
 
@@ -471,6 +479,7 @@ class AdminUserService extends ChangeNotifier {
       .where(
         (user) =>
             user.isActive &&
+            (!_useRemoteApi || int.tryParse(user.id) != null) &&
             (user.role == UserRole.accountant ||
                 user.role == UserRole.firmAdmin ||
                 user.role == UserRole.superAdmin),
@@ -495,6 +504,7 @@ class AdminUserService extends ChangeNotifier {
     _passwordHashes
       ..clear()
       ..addAll(decodePasswordHashes(passwordsJson));
+    if (_useRemoteApi) _passwordHashes.clear();
     var migratedOrigins = false;
     for (var index = 0; index < _users.length; index++) {
       final user = _users[index];
@@ -526,7 +536,6 @@ class AdminUserService extends ChangeNotifier {
     _complianceRecords
       ..clear()
       ..addAll(_decodeComplianceRecords(complianceJson));
-    if (_useRemoteApi) await _mergeRemoteClients();
     _accountingAccessRecords
       ..clear()
       ..addAll(_decodeAccountingAccessRecords(accountingAccessJson));
@@ -536,18 +545,24 @@ class AdminUserService extends ChangeNotifier {
     _tallySyncSettings
       ..clear()
       ..addAll(_decodeTallySyncSettings(tallySyncJson));
+    var remoteDataLoaded = false;
+    if (_useRemoteApi) remoteDataLoaded = await _mergeRemoteClients();
     var provisionedWorkspaces = false;
-    for (final user in _users.where((item) => item.role.isClient)) {
-      if (_workspaceBundles.containsKey(user.id)) continue;
-      _workspaceBundles[user.id] = ClientWorkspaceBundle(
-        clientId: user.id,
-        createdAt: user.createdAt,
-      );
-      provisionedWorkspaces = true;
+    if (!_useRemoteApi) {
+      for (final user in _users.where((item) => item.role.isClient)) {
+        if (_workspaceBundles.containsKey(user.id)) continue;
+        _workspaceBundles[user.id] = ClientWorkspaceBundle(
+          clientId: user.id,
+          createdAt: user.createdAt,
+        );
+        provisionedWorkspaces = true;
+      }
     }
     _importIssues = _decodeImportIssues(importIssuesJson);
     _isLoaded = true;
-    if (migratedOrigins || provisionedWorkspaces) await _save();
+    if (migratedOrigins || provisionedWorkspaces || remoteDataLoaded) {
+      await _save();
+    }
     notifyListeners();
     unawaited(_runDueAutoSyncs());
   }
@@ -588,38 +603,356 @@ class AdminUserService extends ChangeNotifier {
     }
   }
 
-  Future<void> _mergeRemoteClients() async {
+  Future<bool> _mergeRemoteClients() async {
+    final usersBefore = List<UserModel>.from(_users);
+    final complianceBefore = Map<String, AdminClientComplianceRecord>.from(
+      _complianceRecords,
+    );
+    final accountingAccessBefore =
+        Map<String, AdminClientAccountingAccess>.from(_accountingAccessRecords);
+    final workspacesBefore = Map<String, ClientWorkspaceBundle>.from(
+      _workspaceBundles,
+    );
     try {
-      final response = await _dio.get<Map<String, dynamic>>(
-        ApiConstants.adminClients,
-      );
-      final clients = response.data?['data'] is Map
-          ? (response.data!['data'] as Map)['clients']
-          : null;
-      if (clients is! List) return;
-
-      final remoteClients = clients
-          .whereType<Map>()
-          .map((entry) => Map<String, dynamic>.from(entry))
-          .toList(growable: false);
+      final remoteClients = await _clientDataApi.listClients();
+      final localClientIds = _users
+          .where((user) => user.role.isClient)
+          .map((user) => user.id)
+          .toSet();
       _users.removeWhere((user) => user.role.isClient);
-      for (final entry in remoteClients) {
-        final user = UserModel.fromJson(entry);
-        _users.add(user);
-        final gstin = entry['gstin']?.toString().trim() ?? '';
-        _complianceRecords[user.id] = AdminClientComplianceRecord(
-          userId: user.id,
-          gstRegistrationType: gstin.isEmpty
-              ? GstRegistrationType.unregistered
-              : GstRegistrationType.regular,
-          gstin: gstin,
-          pan: entry['pan']?.toString().trim() ?? '',
-          state: entry['state']?.toString().trim() ?? '',
-          city: entry['city']?.toString().trim() ?? '',
+      for (final clientId in localClientIds) {
+        _complianceRecords.remove(clientId);
+        _accountingAccessRecords.remove(clientId);
+        _workspaceBundles.remove(clientId);
+      }
+      for (final aggregate in remoteClients) {
+        _cacheAuthoritativeClient(aggregate, cachePortalAccess: false);
+      }
+      await _mergeRemoteStaff();
+      for (final aggregate in remoteClients) {
+        _clientPortalAccess?.cacheAuthoritativeAggregate(
+          aggregate,
+          notify: false,
         );
       }
+      _directoryLoadError = null;
+      return true;
+    } catch (error) {
+      _users
+        ..clear()
+        ..addAll(usersBefore);
+      _complianceRecords
+        ..clear()
+        ..addAll(complianceBefore);
+      _accountingAccessRecords
+        ..clear()
+        ..addAll(accountingAccessBefore);
+      _workspaceBundles
+        ..clear()
+        ..addAll(workspacesBefore);
+      _directoryLoadError =
+          'Unable to refresh the authoritative client directory. Check your connection or sign in again, then retry.';
+      debugPrint('Unable to refresh authoritative clients: $error');
+      return false;
+    }
+  }
+
+  Future<void> _mergeRemoteStaff() async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        ApiConstants.adminStaff,
+      );
+      final data = response.data?['data'];
+      final staff = data is Map ? data['staff'] : null;
+      if (staff is! List) return;
+
+      _users.removeWhere((user) => !user.role.isClient);
+      for (final entry in staff.whereType<Map>()) {
+        _users.add(UserModel.fromJson(Map<String, dynamic>.from(entry)));
+      }
     } on DioException catch (error) {
-      debugPrint('Unable to refresh admin clients: ${error.message}');
+      debugPrint('Unable to refresh authoritative staff: ${error.message}');
+    }
+  }
+
+  void _cacheAuthoritativeClient(
+    Map<String, dynamic> aggregate, {
+    bool cachePortalAccess = true,
+  }) {
+    final client = _asJsonMap(aggregate['client']);
+    final clientId = client['id']?.toString().trim() ?? '';
+    if (clientId.isEmpty) return;
+
+    final user = UserModel.fromJson(<String, dynamic>{
+      ...client,
+      'firmId': 'client-$clientId',
+    });
+    final userIndex = _users.indexWhere((item) => item.id == clientId);
+    if (userIndex >= 0) {
+      _users[userIndex] = user;
+    } else {
+      _users.add(user);
+    }
+
+    final profile = _asJsonMap(aggregate['profile']);
+    final compliance = _asJsonMap(aggregate['compliance']);
+    final assignment = _asJsonMap(aggregate['assignment']);
+    final workspace = _asJsonMap(aggregate['workspace']);
+    final registrationType = GstRegistrationType.values.firstWhere(
+      (value) => value.name == compliance['gstRegistrationType']?.toString(),
+      orElse: () => GstRegistrationType.unregistered,
+    );
+    final periods = (compliance['servicePeriods'] as List? ?? const <dynamic>[])
+        .whereType<Map>()
+        .map(
+          (period) =>
+              ClientServicePeriod.fromJson(Map<String, dynamic>.from(period)),
+        )
+        .toList(growable: false);
+    _complianceRecords[clientId] = AdminClientComplianceRecord(
+      userId: clientId,
+      gstRegistrationType: registrationType,
+      gstin: profile['gstin']?.toString() ?? '',
+      pan: profile['pan']?.toString() ?? '',
+      state: profile['state']?.toString() ?? '',
+      city: profile['city']?.toString() ?? '',
+      pincode: profile['pincode']?.toString() ?? '',
+      services: (compliance['services'] as List? ?? const <dynamic>[])
+          .map((service) => service.toString())
+          .where((service) => service.trim().isNotEmpty)
+          .toList(growable: false),
+      accountingEnabled: _asBool(compliance['accountingEnabled'], true),
+      gstEnabled: _asBool(compliance['gstEnabled'], false),
+      servicePeriods: periods,
+    );
+    _accountingAccessRecords[clientId] = AdminClientAccountingAccess(
+      clientId: clientId,
+      joinedOn: user.createdAt,
+      assignedAccountantId: assignment['accountantUserId']?.toString() ?? '',
+      assignedCaId: assignment['caUserId']?.toString() ?? '',
+      oldAccountingApproved: _asBool(
+        assignment['oldAccountingApproved'],
+        false,
+      ),
+      reportsPublished: _asBool(assignment['reportsPublished'], false),
+      auditEnabled: _asBool(assignment['auditEnabled'], false),
+      financialStatementsEnabled: _asBool(
+        assignment['financialStatementsEnabled'],
+        false,
+      ),
+      reportSigningEnabled: _asBool(assignment['reportSigningEnabled'], false),
+      bankProjectReportsEnabled: _asBool(
+        assignment['bankProjectReportsEnabled'],
+        false,
+      ),
+      staffDelegationEnabled: _asBool(
+        assignment['staffDelegationEnabled'],
+        false,
+      ),
+    );
+    _workspaceBundles[clientId] = ClientWorkspaceBundle(
+      clientId: clientId,
+      createdAt: user.createdAt,
+      client360Enabled: _asBool(workspace['client360Enabled'], true),
+      documentFolderEnabled: _asBool(workspace['documentFolderEnabled'], true),
+      complianceWorkspaceEnabled: _asBool(
+        workspace['complianceWorkspaceEnabled'],
+        true,
+      ),
+      accountingWorkspaceEnabled: _asBool(
+        workspace['accountingWorkspaceEnabled'],
+        true,
+      ),
+      aiWorkspaceEnabled: _asBool(workspace['aiWorkspaceEnabled'], true),
+      notificationSettingsEnabled: _asBool(
+        workspace['notificationSettingsEnabled'],
+        true,
+      ),
+    );
+    if (cachePortalAccess) {
+      _clientPortalAccess?.cacheAuthoritativeAggregate(
+        aggregate,
+        notify: false,
+      );
+    }
+  }
+
+  Map<String, dynamic> _asJsonMap(Object? value) => value is Map
+      ? Map<String, dynamic>.from(value)
+      : const <String, dynamic>{};
+
+  bool _asBool(Object? value, bool fallback) {
+    if (value == null) return fallback;
+    return value == true || value == 1 || value == '1';
+  }
+
+  Future<GeneratedCredentials> _createRemoteClient({
+    required String name,
+    required String email,
+    required String mobile,
+    required String firmName,
+    required GstRegistrationType gstRegistrationType,
+    required String gstin,
+    required String pan,
+    required String state,
+    required String city,
+    required String pincode,
+    required List<String> services,
+    required bool accountingEnabled,
+    required ClientAccountingMode accountingMode,
+    required DateTime serviceEffectiveFrom,
+    required bool gstEnabled,
+  }) async {
+    if (email.isEmpty || mobile.isEmpty) {
+      throw const FormatException(
+        'The authoritative client directory requires both email and mobile.',
+      );
+    }
+
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        ApiConstants.adminClientImport,
+        data: <String, dynamic>{
+          'clients': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'name': name,
+              'email': email,
+              'mobile': mobile,
+              'firmName': firmName,
+              'sourceRecordId': 'admin:$email:$mobile',
+              'gstRegistrationType': gstRegistrationType.name,
+              'gstin': gstin,
+              'pan': pan,
+              'state': state,
+              'city': city,
+              'pincode': pincode,
+              'services': services,
+              'accountingEnabled': accountingEnabled,
+              'gstEnabled': gstEnabled,
+            },
+          ],
+        },
+      );
+      if (!await _mergeRemoteClients()) {
+        throw const FormatException(
+          'Client was saved, but the authoritative client directory could not be refreshed.',
+        );
+      }
+
+      final user = _users
+          .where(
+            (item) =>
+                item.role.isClient &&
+                item.email.toLowerCase() == email.toLowerCase() &&
+                item.mobile == mobile,
+          )
+          .firstOrNull;
+      if (user == null) {
+        throw const FormatException(
+          'The server did not return the newly created client.',
+        );
+      }
+
+      final aggregate = await _clientDataApi.updateCompliance(
+        user.id,
+        <String, dynamic>{
+          'gstRegistrationType': gstRegistrationType.name,
+          'accountingEnabled': accountingEnabled,
+          'gstEnabled': gstEnabled,
+          'services': services,
+          'servicePeriods': <Map<String, dynamic>>[
+            ClientServicePeriod(
+              effectiveFrom: _dateOnly(serviceEffectiveFrom),
+              accountingMode: accountingMode,
+              gstRegistrationType: gstRegistrationType,
+            ).toJson(),
+          ],
+        },
+      );
+      _cacheAuthoritativeClient(aggregate);
+      await _clientPortalAccess?.syncAssignedServices(user.id, services);
+      await _save();
+      notifyListeners();
+      return GeneratedCredentials(userId: user.id, temporaryPassword: '');
+    } on DioException catch (error) {
+      throw FormatException(ApiError.fromDioException(error).message);
+    } on ApiError catch (error) {
+      throw FormatException(error.message);
+    }
+  }
+
+  Future<void> _updateRemoteClient({
+    required UserModel before,
+    required UserModel updated,
+    required AdminClientComplianceRecord compliance,
+    required bool updateCompliance,
+  }) async {
+    if (int.tryParse(before.id) == null) {
+      throw const FormatException(
+        'This client has not been migrated to the authoritative server.',
+      );
+    }
+    if (updated.firmName.trim().isEmpty) {
+      throw const FormatException('Firm name is required.');
+    }
+
+    try {
+      var aggregate = await _clientDataApi.loadClient(before.id);
+      if (before.email != updated.email || before.mobile != updated.mobile) {
+        aggregate = await _clientDataApi
+            .updateIdentity(before.id, <String, dynamic>{
+              if (before.email != updated.email) 'email': updated.email,
+              if (before.mobile != updated.mobile) 'mobile': updated.mobile,
+            });
+        _cacheAuthoritativeClient(aggregate);
+      }
+
+      final remoteClient = _asJsonMap(aggregate['client']);
+      final remoteProfile = _asJsonMap(aggregate['profile']);
+      final profilePatch = <String, dynamic>{};
+      if (remoteClient['name']?.toString().trim() != updated.name) {
+        profilePatch['name'] = updated.name;
+      }
+      if (remoteClient['firmName']?.toString().trim() != updated.firmName) {
+        profilePatch['firmName'] = updated.firmName;
+      }
+      final clearFields = <String>[];
+      void addProfileField(String field, String value) {
+        final desired = value.trim();
+        final stored = remoteProfile[field]?.toString().trim() ?? '';
+        if (desired == stored) return;
+        if (desired.isEmpty) {
+          if (stored.isNotEmpty) clearFields.add(field);
+          return;
+        }
+        profilePatch[field] = desired;
+      }
+
+      addProfileField('gstin', compliance.gstin.toUpperCase());
+      addProfileField('pan', compliance.pan.toUpperCase());
+      addProfileField('state', compliance.state);
+      addProfileField('city', compliance.city);
+      addProfileField('pincode', compliance.pincode);
+      if (clearFields.isNotEmpty) profilePatch['clearFields'] = clearFields;
+      if (profilePatch.isNotEmpty) {
+        aggregate = await _clientDataApi.updateProfile(before.id, profilePatch);
+        _cacheAuthoritativeClient(aggregate);
+      }
+
+      if (!updateCompliance) return;
+      aggregate = await _clientDataApi
+          .updateCompliance(before.id, <String, dynamic>{
+            'gstRegistrationType': compliance.gstRegistrationType.name,
+            'accountingEnabled': compliance.accountingEnabled,
+            'gstEnabled': compliance.gstEnabled,
+            'services': compliance.services,
+            'servicePeriods': compliance.servicePeriods
+                .map((period) => period.toJson())
+                .toList(growable: false),
+          });
+      _cacheAuthoritativeClient(aggregate);
+    } on ApiError catch (error) {
+      throw FormatException(error.message);
     }
   }
 
@@ -655,8 +988,32 @@ class AdminUserService extends ChangeNotifier {
     );
     _ensureUnique(normalizedEmail, normalizedMobile);
 
-    final credentials = _generateCredentials(name);
     final isClient = role.isClient;
+    if (_useRemoteApi && isClient) {
+      return _createRemoteClient(
+        name: name.trim(),
+        email: normalizedEmail,
+        mobile: normalizedMobile,
+        firmName: firmName.trim().isEmpty
+            ? 'Chirag Associates'
+            : firmName.trim(),
+        gstRegistrationType: gstRegistrationType,
+        gstin: normalizedGstin,
+        pan: pan.trim().toUpperCase(),
+        state: state.trim(),
+        city: city.trim(),
+        pincode: pincode.trim(),
+        services: List<String>.unmodifiable(services),
+        accountingEnabled: accountingEnabled,
+        accountingMode: accountingMode,
+        serviceEffectiveFrom: serviceEffectiveFrom ?? DateTime.now(),
+        gstEnabled:
+            gstEnabled ||
+            gstRegistrationType != GstRegistrationType.unregistered,
+      );
+    }
+
+    final credentials = _generateCredentials(name);
     final effectiveActive = isClient ? false : isActive ?? true;
     final user = UserModel(
       id: credentials.userId,
@@ -747,6 +1104,11 @@ class AdminUserService extends ChangeNotifier {
     String state = '',
     String city = '',
   }) async {
+    if (_useRemoteApi) {
+      throw UnsupportedError(
+        'Self-registration must use the server authentication flow.',
+      );
+    }
     _validateIdentity(name: name, email: email, mobile: mobile);
     final normalizedEmail = email.trim().toLowerCase();
     final normalizedMobile = _normalizeMobile(mobile);
@@ -864,8 +1226,7 @@ class AdminUserService extends ChangeNotifier {
       firmName: firmName.trim(),
       role: role,
     );
-    _users[index] = updated;
-    _complianceRecords[userId] = AdminClientComplianceRecord(
+    final nextCompliance = AdminClientComplianceRecord(
       userId: userId,
       gstRegistrationType: nextRegistrationType,
       gstin: normalizedGstin,
@@ -879,6 +1240,44 @@ class AdminUserService extends ChangeNotifier {
       gstEnabled: gstEnabled ?? currentCompliance.gstEnabled,
       servicePeriods: List<ClientServicePeriod>.unmodifiable(servicePeriods),
     );
+    final complianceChanged =
+        gstRegistrationType != null ||
+        accountingEnabled != null ||
+        gstEnabled != null ||
+        services != null ||
+        accountingMode != null ||
+        serviceEffectiveFrom != null;
+    if (_useRemoteApi && (before.role.isClient || role.isClient)) {
+      if (!before.role.isClient || !role.isClient) {
+        throw const FormatException(
+          'Changing a client account into another role requires a server-side migration.',
+        );
+      }
+      await _updateRemoteClient(
+        before: before,
+        updated: updated,
+        compliance: nextCompliance,
+        updateCompliance: complianceChanged,
+      );
+      if (services != null) {
+        await _clientPortalAccess?.syncAssignedServices(userId, services);
+      }
+      await _save();
+      final current = _users[_indexOf(userId)];
+      _publishAudit(
+        eventType: EventTypes.adminUserLifecycleChanged,
+        user: current,
+        action: AdminAuditAction.updated,
+        actorUserId: actorUserId,
+        actorRole: actorRole,
+        before: before.toJson(),
+        after: current.toJson(),
+      );
+      notifyListeners();
+      return;
+    }
+    _users[index] = updated;
+    _complianceRecords[userId] = nextCompliance;
     await _save();
     if (updated.role.isClient) {
       await _clientPortalAccess?.syncAssignedServices(
@@ -921,6 +1320,11 @@ class AdminUserService extends ChangeNotifier {
   }
 
   Future<void> updatePassword(String userId, String password) async {
+    if (_useRemoteApi) {
+      throw UnsupportedError(
+        'Password changes must use the verified server password flow.',
+      );
+    }
     final index = _indexOf(userId);
     _passwordHashes[userId] = hashPassword(password);
     _temporaryPasswords.remove(userId);
@@ -938,6 +1342,70 @@ class AdminUserService extends ChangeNotifier {
     String actorRole = 'superAdmin',
   }) async {
     final credentials = <String, GeneratedCredentials>{};
+    if (_useRemoteApi) {
+      for (final userId in userIds.toSet()) {
+        final index = _indexOf(userId);
+        final before = _users[index];
+        if (!before.role.isClient) {
+          throw const FormatException('Only client accounts can be onboarded.');
+        }
+        if (before.clientStatus == ClientAccountStatus.archived) {
+          throw FormatException(
+            '${before.name} is archived and cannot be onboarded.',
+          );
+        }
+        if (!const <ClientAccountStatus>{
+          ClientAccountStatus.draft,
+          ClientAccountStatus.pendingApproval,
+          ClientAccountStatus.notOnboarded,
+        }.contains(before.clientStatus)) {
+          throw FormatException('${before.name} is already onboarded.');
+        }
+        if (int.tryParse(userId) == null) {
+          throw const FormatException(
+            'This client has not been migrated to the authoritative server.',
+          );
+        }
+
+        try {
+          final provisioned = await _clientDataApi.provisionCredentials(
+            userId,
+            onboarding: true,
+          );
+          _cacheAuthoritativeClient(provisioned.aggregate);
+          _temporaryPasswords[userId] = provisioned.temporaryPassword;
+          credentials[userId] = GeneratedCredentials(
+            userId: userId,
+            temporaryPassword: provisioned.temporaryPassword,
+          );
+        } on ApiError catch (error) {
+          throw FormatException(error.message);
+        }
+
+        final current = _users[_indexOf(userId)];
+        await _referralService?.rewardOnboarding(
+          onboardedClientId: current.id,
+          mobile: current.mobile,
+          gstin: complianceFor(current.id).gstin,
+        );
+        _publishAudit(
+          eventType: EventTypes.adminUserLifecycleChanged,
+          user: current,
+          action: AdminAuditAction.activated,
+          actorUserId: actorUserId,
+          actorRole: actorRole,
+          before: before.toJson(),
+          after: current.toJson(),
+          metadata: const <String, dynamic>{
+            'onboardingCompleted': true,
+            'temporaryPasswordGenerated': true,
+          },
+        );
+      }
+      await _save();
+      notifyListeners();
+      return Map<String, GeneratedCredentials>.unmodifiable(credentials);
+    }
     for (final userId in userIds.toSet()) {
       final index = _indexOf(userId);
       final before = _users[index];
@@ -1005,6 +1473,7 @@ class AdminUserService extends ChangeNotifier {
   Future<UserModel> recordSuccessfulLogin(String userId) async {
     final index = _indexOf(userId);
     final current = _users[index];
+    if (_useRemoteApi) return current;
     final updated = current.copyWith(
       lastLoginAt: DateTime.now(),
       loginStatus: current.mustChangePassword
@@ -1033,7 +1502,12 @@ class AdminUserService extends ChangeNotifier {
     }
     final index = _indexOf(userId);
     final before = _users[index];
-    if (before.role.isClient && before.onboardedAt == null) {
+    final isNotOnboarded =
+        before.clientStatus == ClientAccountStatus.draft ||
+        before.clientStatus == ClientAccountStatus.pendingApproval ||
+        before.clientStatus == ClientAccountStatus.notOnboarded;
+    if (before.role.isClient &&
+        (_useRemoteApi ? isNotOnboarded : before.onboardedAt == null)) {
       throw const FormatException(
         'Onboard the client before changing portal access.',
       );
@@ -1045,6 +1519,39 @@ class AdminUserService extends ChangeNotifier {
           : ClientAccountStatus.inactive,
       loginStatus: isActive ? updated.loginStatus : ClientLoginStatus.locked,
     );
+    if (_useRemoteApi) {
+      if (int.tryParse(userId) == null) {
+        throw const FormatException(
+          'This client has not been migrated to the authoritative server.',
+        );
+      }
+      try {
+        _cacheAuthoritativeClient(
+          await _clientDataApi.updateIdentity(userId, <String, dynamic>{
+            'isActive': statusUpdated.isActive,
+            'clientStatus': statusUpdated.clientStatus.name,
+            'loginStatus': statusUpdated.loginStatus.name,
+          }),
+        );
+      } on ApiError catch (error) {
+        throw FormatException(error.message);
+      }
+      await _save();
+      final current = _users[_indexOf(userId)];
+      _publishAudit(
+        eventType: EventTypes.adminUserLifecycleChanged,
+        user: current,
+        action: isActive
+            ? AdminAuditAction.activated
+            : AdminAuditAction.deactivated,
+        actorUserId: actorUserId,
+        actorRole: actorRole,
+        before: before.toJson(),
+        after: current.toJson(),
+      );
+      notifyListeners();
+      return;
+    }
     _users[index] = statusUpdated;
     await _save();
     _publishAudit(
@@ -1117,6 +1624,37 @@ class AdminUserService extends ChangeNotifier {
       );
     }
 
+    if (_useRemoteApi) {
+      if (int.tryParse(clientId) == null) {
+        throw const FormatException(
+          'This client has not been migrated to the authoritative server.',
+        );
+      }
+      try {
+        final aggregate = await _clientDataApi
+            .updateAssignments(clientId, <String, dynamic>{
+              'accountantUserId': _serverUserId(
+                accountantId,
+                'Assigned accountant',
+              ),
+              'caUserId': _serverUserId(caId, 'Assigned CA or Auditor'),
+              'oldAccountingApproved': oldAccountingApproved,
+              'reportsPublished': reportsPublished,
+              'auditEnabled': auditEnabled,
+              'financialStatementsEnabled': financialStatementsEnabled,
+              'reportSigningEnabled': reportSigningEnabled,
+              'bankProjectReportsEnabled': bankProjectReportsEnabled,
+              'staffDelegationEnabled': staffDelegationEnabled,
+            });
+        _cacheAuthoritativeClient(aggregate);
+        await _save();
+        notifyListeners();
+        return;
+      } on ApiError catch (error) {
+        throw FormatException(error.message);
+      }
+    }
+
     final current = accountingAccessFor(clientId);
     _accountingAccessRecords[clientId] = AdminClientAccountingAccess(
       clientId: clientId,
@@ -1133,6 +1671,16 @@ class AdminUserService extends ChangeNotifier {
     );
     await _save();
     notifyListeners();
+  }
+
+  int? _serverUserId(String userId, String label) {
+    final normalized = userId.trim();
+    if (normalized.isEmpty) return null;
+    final parsed = int.tryParse(normalized);
+    if (parsed == null || parsed <= 0) {
+      throw FormatException('$label must be a server-authoritative user.');
+    }
+    return parsed;
   }
 
   Future<void> configureTallySync(TallySyncSettings settings) async {
@@ -1343,6 +1891,36 @@ class AdminUserService extends ChangeNotifier {
         clientStatus: ClientAccountStatus.archived,
         loginStatus: ClientLoginStatus.locked,
       );
+      if (_useRemoteApi) {
+        if (int.tryParse(userId) == null) {
+          throw const FormatException(
+            'This client has not been migrated to the authoritative server.',
+          );
+        }
+        try {
+          _cacheAuthoritativeClient(
+            await _clientDataApi.updateIdentity(userId, <String, dynamic>{
+              'isActive': false,
+              'clientStatus': ClientAccountStatus.archived.name,
+              'loginStatus': ClientLoginStatus.locked.name,
+            }),
+          );
+        } on ApiError catch (error) {
+          throw FormatException(error.message);
+        }
+        _temporaryPasswords.remove(userId);
+        final current = _users[_indexOf(userId)];
+        _publishAudit(
+          eventType: EventTypes.adminUserLifecycleChanged,
+          user: current,
+          action: AdminAuditAction.archived,
+          actorUserId: actorUserId,
+          actorRole: actorRole,
+          before: before.toJson(),
+          after: current.toJson(),
+        );
+        continue;
+      }
       _users[index] = archived;
       _temporaryPasswords.remove(userId);
       _publishAudit(
@@ -1364,6 +1942,13 @@ class AdminUserService extends ChangeNotifier {
     String actorUserId = 'system',
     String actorRole = 'superAdmin',
   }) async {
+    if (_useRemoteApi) {
+      return archiveClients(
+        userIds,
+        actorUserId: actorUserId,
+        actorRole: actorRole,
+      );
+    }
     for (final userId in userIds.toSet()) {
       final index = _indexOf(userId);
       final user = _users[index];
@@ -1450,6 +2035,40 @@ class AdminUserService extends ChangeNotifier {
       throw const FormatException(
         'Onboard the client before resetting login credentials.',
       );
+    }
+    if (_useRemoteApi) {
+      if (int.tryParse(userId) == null) {
+        throw const FormatException(
+          'This client has not been migrated to the authoritative server.',
+        );
+      }
+      try {
+        final provisioned = await _clientDataApi.provisionCredentials(
+          userId,
+          onboarding: false,
+        );
+        _cacheAuthoritativeClient(provisioned.aggregate);
+        _temporaryPasswords[userId] = provisioned.temporaryPassword;
+        await _save();
+        final current = _users[_indexOf(userId)];
+        _publishAudit(
+          eventType: EventTypes.adminUserLifecycleChanged,
+          user: current,
+          action: AdminAuditAction.passwordReset,
+          actorUserId: actorUserId,
+          actorRole: actorRole,
+          before: user.toJson(),
+          after: current.toJson(),
+          metadata: const <String, dynamic>{'temporaryPasswordGenerated': true},
+        );
+        notifyListeners();
+        return GeneratedCredentials(
+          userId: userId,
+          temporaryPassword: provisioned.temporaryPassword,
+        );
+      } on ApiError catch (error) {
+        throw FormatException(error.message);
+      }
     }
     final credentials = GeneratedCredentials(
       userId: user.id,
@@ -1804,6 +2423,25 @@ class AdminUserService extends ChangeNotifier {
   }
 
   Future<void> _markCredentialsSent(String userId) async {
+    if (_useRemoteApi) {
+      if (int.tryParse(userId) == null) {
+        throw const FormatException(
+          'This client has not been migrated to the authoritative server.',
+        );
+      }
+      try {
+        _cacheAuthoritativeClient(
+          await _clientDataApi.updateIdentity(userId, <String, dynamic>{
+            'loginStatus': ClientLoginStatus.credentialsSent.name,
+          }),
+        );
+      } on ApiError catch (error) {
+        throw FormatException(error.message);
+      }
+      await _save();
+      notifyListeners();
+      return;
+    }
     final index = _indexOf(userId);
     _users[index] = _users[index].copyWith(
       loginStatus: ClientLoginStatus.credentialsSent,
@@ -1819,10 +2457,14 @@ class AdminUserService extends ChangeNotifier {
       storageKey,
       jsonEncode(_users.map((user) => user.toJson()).toList(growable: false)),
     );
-    await preferences.setString(
-      passwordStorageKey,
-      jsonEncode(_passwordHashes),
-    );
+    if (_useRemoteApi) {
+      await preferences.remove(passwordStorageKey);
+    } else {
+      await preferences.setString(
+        passwordStorageKey,
+        jsonEncode(_passwordHashes),
+      );
+    }
     await preferences.setString(
       complianceStorageKey,
       jsonEncode(

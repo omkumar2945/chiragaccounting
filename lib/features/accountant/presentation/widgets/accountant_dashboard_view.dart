@@ -36,6 +36,7 @@ class AccountantDashboardView extends StatefulWidget {
     required this.ocrBuilder,
     required this.showGstWork,
     required this.gstWorkBuilder,
+    required this.itcReconciliationBuilder,
     required this.eInvoiceBuilder,
     required this.eWayBillBuilder,
     required this.clientAccountingBuilder,
@@ -62,6 +63,7 @@ class AccountantDashboardView extends StatefulWidget {
   final WidgetBuilder ocrBuilder;
   final bool showGstWork;
   final WidgetBuilder gstWorkBuilder;
+  final WidgetBuilder itcReconciliationBuilder;
   final WidgetBuilder eInvoiceBuilder;
   final WidgetBuilder eWayBillBuilder;
   final WidgetBuilder clientAccountingBuilder;
@@ -184,6 +186,8 @@ class _AccountantDashboardViewState extends State<AccountantDashboardView> {
       _AccountantPane.vouchers => widget.voucherCheckBuilder(context),
       _AccountantPane.documents => _documentsPane(),
       _AccountantPane.gstWork => widget.gstWorkBuilder(context),
+      _AccountantPane.itcReconciliation =>
+        widget.itcReconciliationBuilder(context),
       _AccountantPane.eInvoice => widget.eInvoiceBuilder(context),
       _AccountantPane.eWayBill => widget.eWayBillBuilder(context),
       _AccountantPane.clientAccounting => widget.clientAccountingBuilder(
@@ -395,6 +399,13 @@ class _AccountantDashboardViewState extends State<AccountantDashboardView> {
           Icons.account_balance_outlined,
           'GST-PORTAL WORK',
           _AccountantPane.gstWork,
+          null,
+        ),
+      if (widget.showGstWork)
+        _NavItem(
+          Icons.account_balance_wallet_outlined,
+          'GST ITC Reconciliation',
+          _AccountantPane.itcReconciliation,
           null,
         ),
       if (widget.showGstWork)
@@ -1799,6 +1810,7 @@ enum _AccountantPane {
   vouchers,
   documents,
   gstWork,
+  itcReconciliation,
   eInvoice,
   eWayBill,
   clientAccounting,

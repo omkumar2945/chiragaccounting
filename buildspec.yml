@@ -1,58 +1,26 @@
 version: 0.2
 
-phases:
-  pre_build:
-    commands:
-      - echo Logging in to Amazon ECR...
-      - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 513954968199.dkr.ecr.ap-south-1.amazonaws.com
-
-  build:
-    commands:
-      - echo Building Docker image...
-      - docker build -t $ImageName -f ./backend/Dockerfile ./backend
-
-  post_build:
-    commands:
-      - echo Pushing image to ECR...
-      - docker tag $ImageName:latest 513954968199.dkr.ecr.ap-south-1.amazonaws.com/$ImageName:latest
-      - docker push 513954968199.dkr.ecr.ap-south-1.amazonaws.com/$ImageName:latest
-version: 0.2
-
+# Backend CodeBuild project. Set IMAGE_REPOSITORY_URI to the target ECR
+# repository URI; a downstream ECS deployment stage consumes imagedefinitions.
 env:
   variables:
-    FLUTTER_CHANNEL: stable
-    USE_FIREBASE: "true"
+    AWS_REGION: ap-south-1
 
 phases:
-  install:
-    commands:
-      - git clone --depth 1 --branch "$FLUTTER_CHANNEL" https://github.com/flutter/flutter.git "$HOME/flutter"
-      - export PATH="$HOME/flutter/bin:$PATH"
-      - flutter config --enable-web
-      - flutter --version
   pre_build:
     commands:
-      - export PATH="$HOME/flutter/bin:$PATH"
-      - flutter pub get
+      - test -n "$IMAGE_REPOSITORY_URI"
+      - export IMAGE_TAG="${IMAGE_TAG:-${CODEBUILD_RESOLVED_SOURCE_VERSION:-latest}}"
+      - export IMAGE_URI="$IMAGE_REPOSITORY_URI:$IMAGE_TAG"
+      - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "${IMAGE_REPOSITORY_URI%/*}"
   build:
     commands:
-      - export PATH="$HOME/flutter/bin:$PATH"
-      - chmod +x scripts/deploy.sh
-      - >-
-        flutter build web --release
-        --dart-define=API_BASE_URL="$API_BASE_URL"
-        --dart-define=USE_FIREBASE="$USE_FIREBASE"
-        --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY"
-        --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID"
-        --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID"
-        --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID"
-        --dart-define=FIREBASE_AUTH_DOMAIN="$FIREBASE_AUTH_DOMAIN"
-        --dart-define=FIREBASE_STORAGE_BUCKET="$FIREBASE_STORAGE_BUCKET"
-        --dart-define=FIREBASE_MEASUREMENT_ID="$FIREBASE_MEASUREMENT_ID"
-        --dart-define=FIREBASE_WEB_VAPID_KEY="$FIREBASE_WEB_VAPID_KEY"
+      - docker build --tag "$IMAGE_URI" -f backend/Dockerfile backend
+  post_build:
+    commands:
+      - docker push "$IMAGE_URI"
+      - printf '[{"name":"chirag-command-center-backend","imageUri":"%s"}]' "$IMAGE_URI" > imagedefinitions.json
 
 artifacts:
   files:
-    - appspec.yml
-    - build/web/**/*
-    - scripts/deploy.sh
+    - imagedefinitions.json

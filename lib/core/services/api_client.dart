@@ -36,14 +36,22 @@ class _AuthInterceptor extends QueuedInterceptorsWrapper {
 
   _AuthInterceptor(this._dio);
 
+  bool _isPublicPasswordResetRequest(String path) {
+    return path == ApiConstants.forgotPassword ||
+        path == ApiConstants.loginOtpVerify ||
+        path == ApiConstants.resetPassword;
+  }
+
   @override
   Future<void> onRequest(
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    final token = await SecureStorageService.getAccessToken();
-    if (token != null) {
-      options.headers[ApiConstants.authHeader] = 'Bearer $token';
+    if (!_isPublicPasswordResetRequest(options.path)) {
+      final token = await SecureStorageService.getAccessToken();
+      if (token != null) {
+        options.headers[ApiConstants.authHeader] = 'Bearer $token';
+      }
     }
     handler.next(options);
   }
@@ -55,6 +63,7 @@ class _AuthInterceptor extends QueuedInterceptorsWrapper {
   ) async {
     // Only attempt refresh for 401 responses (not for the refresh call itself)
     if (err.response?.statusCode == 401 &&
+      !_isPublicPasswordResetRequest(err.requestOptions.path) &&
         err.requestOptions.path != ApiConstants.refreshToken) {
       final refreshed = await _tryRefreshToken();
       if (refreshed) {

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:chirag_accounting/core/utils/file_download.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -44,6 +45,10 @@ class _HrManagementScreenState extends State<HrManagementScreen> {
         backgroundColor: const Color(0xFF37474F),
         foregroundColor: Colors.white,
         bottom: const TabBar(
+          labelColor: Colors.white,
+          unselectedLabelColor: Color(0xFFD4E2EA),
+          indicatorColor: Color(0xFFFFC857),
+          indicatorWeight: 3,
           tabs: [
             Tab(icon: Icon(Icons.badge_outlined), text: 'Chirag Staff'),
             Tab(icon: Icon(Icons.person_search_outlined), text: 'Hiring'),
@@ -547,14 +552,12 @@ class _HrManagementScreenState extends State<HrManagementScreen> {
   Future<void> _downloadCandidateTemplate(BuildContext context) async {
     const fileName = 'hiring_candidate_import_template.csv';
     try {
-      await FilePicker.saveFile(
-        dialogTitle: 'Save Hiring Candidate Template',
+      await downloadFile(
         fileName: fileName,
         bytes: Uint8List.fromList(
           utf8.encode(ImportTemplateContent.hiringCandidatesCsv),
         ),
-        type: FileType.custom,
-        allowedExtensions: const <String>['csv'],
+        mimeType: 'text/csv;charset=utf-8',
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
